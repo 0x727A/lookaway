@@ -48,7 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         NSApp.setActivationPolicy(.accessory)
         
-        statusItem = NSStatusBar.system.statusItem(withLength: 64)
+        statusItem = NSStatusBar.system.statusItem(withLength: 44)
         
         // 左键点击弹出设置，右键弹出菜单
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -128,8 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             iconColor = .controlTextColor
         }
         
-        let button = statusItem.button!
-        let buttonBounds = button.bounds
+        guard let button = statusItem.button else { return }
         
         // 清理之前的自定义 view
         button.subviews.forEach { $0.removeFromSuperview() }
@@ -137,26 +136,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         button.image = nil
         button.attributedTitle = NSAttributedString(string: "")
         
-        // 创建容器 view，填满 button
-        let container = NSView(frame: buttonBounds)
+        let w: CGFloat = 44
+        let h = button.bounds.height > 0 ? button.bounds.height : 24
+        
+        // 创建容器 view
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
         container.autoresizingMask = [.width, .height]
         
-        // 时间标签（第一行，偏上）
+        // 时间标签（第一行，偏上，y = h - 14 避免顶部被裁）
         let timeLabel = NSTextField(labelWithString: timeText)
-        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
         timeLabel.textColor = .controlTextColor
         timeLabel.alignment = .center
-        timeLabel.sizeToFit()
-        timeLabel.frame = NSRect(
-            x: (container.frame.width - timeLabel.frame.width) / 2,
-            y: 10,
-            width: timeLabel.frame.width,
-            height: 11
-        )
-        timeLabel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+        timeLabel.frame = NSRect(x: 0, y: h - 14, width: w, height: 12)
         container.addSubview(timeLabel)
         
-        // 图标（第二行，偏下）
+        // 图标（第二行，偏下，9×9 居中）
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
@@ -165,14 +160,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let iconView = NSImageView()
             iconView.image = tintedImage
             iconView.imageScaling = .scaleProportionallyDown
-            iconView.setFrameSize(NSSize(width: 10, height: 10))
-            iconView.frame = NSRect(
-                x: (container.frame.width - 10) / 2,
-                y: 1,
-                width: 10,
-                height: 10
-            )
-            iconView.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
+            iconView.frame = NSRect(x: (w - 9) / 2, y: 2, width: 9, height: 9)
             container.addSubview(iconView)
         }
         
