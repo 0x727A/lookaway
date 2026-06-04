@@ -131,14 +131,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 分别设置 title 和 image，用 imageBelow 实现两行布局
         let button = statusItem.button!
         button.title = timeText
-        button.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
+        button.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
         
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 8, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
             button.image = image.withSymbolConfiguration(config)
         }
         button.imagePosition = .imageBelow
+        button.alignment = .center
         button.imageHugsTitle = true
     }
     
