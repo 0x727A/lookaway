@@ -115,42 +115,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let iconColor: NSColor
         
         if restWindow != nil {
-            // 休息中
             symbolName = "cup.and.saucer.fill"
             iconColor = .systemOrange
         } else if isPaused {
-            // 暂停
             symbolName = "pause.fill"
             iconColor = .systemYellow
         } else if countdownSeconds < 60 {
-            // 快休息了（小于1分钟）
             symbolName = "exclamationmark.triangle.fill"
             iconColor = .systemRed
         } else {
-            // 正常工作中
             symbolName = "sunglasses.fill"
             iconColor = .controlTextColor
         }
         
-        // 构建两行 attributed string：时间在上，图标在下，紧凑居中
+        // 构建两行 attributed string，紧凑适配菜单栏 22pt 高度
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = -4
-        paragraphStyle.paragraphSpacing = 0
-        paragraphStyle.minimumLineHeight = 10
-        paragraphStyle.maximumLineHeight = 11
+        paragraphStyle.lineSpacing = -2
         
-        // 时间部分（第一行）
+        // 时间在上，7pt 等宽数字
         let timeAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 7, weight: .medium),
             .paragraphStyle: paragraphStyle,
             .foregroundColor: NSColor.controlTextColor
         ]
         let mutableAttr = NSMutableAttributedString(string: timeText + "\n", attributes: timeAttrs)
         
-        // SF Symbol 图标部分（第二行）
+        // 图标在下，9pt
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
             let tintedImage = image.withSymbolConfiguration(config)
             
@@ -203,11 +196,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.isForceRestMode = force
                 self?.countdownSeconds = work * 60
                 self?.updateMenuTitle()
-                self?.settingsWindow?.close()
+                self?.settingsWindow?.orderOut(nil)
                 self?.settingsWindow = nil
             },
             onCancel: { [weak self] in
-                self?.settingsWindow?.close()
+                self?.settingsWindow?.orderOut(nil)
                 self?.settingsWindow = nil
             }
         ))
