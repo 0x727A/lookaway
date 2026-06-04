@@ -145,25 +145,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 时间标签（第一行，偏上，y = h - 14 避免顶部被裁）
         let timeLabel = NSTextField(labelWithString: timeText)
-        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         timeLabel.textColor = .controlTextColor
         timeLabel.alignment = .center
         timeLabel.frame = NSRect(x: 0, y: h - 14, width: w, height: 12)
         container.addSubview(timeLabel)
         
-        // 图标（第二行，偏下，12×12 居中）
+        // 图标（第二行，偏下，13×13 居中）
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
             let tintedImage = image.withSymbolConfiguration(config)
             
             let iconView = NSImageView()
             iconView.image = tintedImage
             iconView.imageScaling = .scaleProportionallyDown
-            let iconSize: CGFloat = 12
+            let iconSize: CGFloat = 13
             iconView.frame = NSRect(
                 x: (w - iconSize) / 2,
-                y: 1,
+                y: 0,
                 width: iconSize,
                 height: iconSize
             )
