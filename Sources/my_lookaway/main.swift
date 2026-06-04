@@ -128,19 +128,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             iconColor = .controlTextColor
         }
         
-        // 分别设置 title 和 image，用 imageBelow 实现两行布局
-        let button = statusItem.button!
-        button.title = timeText
-        button.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        // 用 attributedTitle 精确控制两行布局
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineSpacing = 1
+        paragraphStyle.paragraphSpacingBefore = 0
+        paragraphStyle.paragraphSpacing = 0
         
+        // 时间在上，10pt
+        let timeAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
+            .paragraphStyle: paragraphStyle,
+            .foregroundColor: NSColor.controlTextColor
+        ]
+        let mutableAttr = NSMutableAttributedString(string: timeText + "\n", attributes: timeAttrs)
+        
+        // 图标在下，10pt，通过 bounds 下移避免贴太近
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
-            button.image = image.withSymbolConfiguration(config)
+            let tintedImage = image.withSymbolConfiguration(config)
+            
+            let attachment = NSTextAttachment()
+            attachment.image = tintedImage
+            attachment.bounds = CGRect(x: 0, y: -1, width: 10, height: 10)
+            let iconAttr = NSAttributedString(attachment: attachment)
+            mutableAttr.append(iconAttr)
         }
-        button.imagePosition = .imageBelow
-        button.alignment = .center
-        button.imageHugsTitle = true
+        
+        statusItem.button?.attributedTitle = mutableAttr
     }
     
     @objc func togglePause() {
