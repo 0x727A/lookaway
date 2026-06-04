@@ -128,29 +128,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             iconColor = .controlTextColor
         }
         
-        // 构建两行 attributed string：时间在上，图标在下
+        // 构建两行 attributed string：时间在上，图标在下，紧凑居中
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = -2
-        paragraphStyle.maximumLineHeight = 22
+        paragraphStyle.lineSpacing = -4
+        paragraphStyle.paragraphSpacing = 0
+        paragraphStyle.minimumLineHeight = 10
+        paragraphStyle.maximumLineHeight = 11
         
-        // 时间部分
+        // 时间部分（第一行）
         let timeAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 9, weight: .medium),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium),
             .paragraphStyle: paragraphStyle,
             .foregroundColor: NSColor.controlTextColor
         ]
         let mutableAttr = NSMutableAttributedString(string: timeText + "\n", attributes: timeAttrs)
         
-        // SF Symbol 图标部分
+        // SF Symbol 图标部分（第二行）
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+                .applying(.init(hierarchicalColor: iconColor))
+            let tintedImage = image.withSymbolConfiguration(config)
+            
             let attachment = NSTextAttachment()
-            attachment.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+            attachment.image = tintedImage
             let iconAttr = NSAttributedString(attachment: attachment)
             mutableAttr.append(iconAttr)
-            
-            // 给图标加颜色
-            mutableAttr.addAttribute(.foregroundColor, value: iconColor, range: NSRange(location: timeText.count + 1, length: 1))
         }
         
         statusItem.button?.attributedTitle = mutableAttr
