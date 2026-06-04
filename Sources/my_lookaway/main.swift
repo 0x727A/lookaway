@@ -128,32 +128,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             iconColor = .controlTextColor
         }
         
-        // 构建两行 attributed string，紧凑适配菜单栏 22pt 高度
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = -2
+        // 分别设置 title 和 image，用 imageBelow 实现两行布局
+        let button = statusItem.button!
+        button.title = timeText
+        button.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
         
-        // 时间在上，7pt 等宽数字
-        let timeAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 7, weight: .medium),
-            .paragraphStyle: paragraphStyle,
-            .foregroundColor: NSColor.controlTextColor
-        ]
-        let mutableAttr = NSMutableAttributedString(string: timeText + "\n", attributes: timeAttrs)
-        
-        // 图标在下，9pt
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: 8, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
-            let tintedImage = image.withSymbolConfiguration(config)
-            
-            let attachment = NSTextAttachment()
-            attachment.image = tintedImage
-            let iconAttr = NSAttributedString(attachment: attachment)
-            mutableAttr.append(iconAttr)
+            button.image = image.withSymbolConfiguration(config)
         }
-        
-        statusItem.button?.attributedTitle = mutableAttr
+        button.imagePosition = .imageBelow
+        button.imageHugsTitle = true
     }
     
     @objc func togglePause() {
