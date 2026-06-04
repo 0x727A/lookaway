@@ -130,21 +130,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         let button = statusItem.button!
         
-        // 清理之前可能设置的 attributedTitle，避免冲突
+        // 清理之前的自定义 view
+        button.subviews.forEach { $0.removeFromSuperview() }
+        button.title = ""
+        button.image = nil
         button.attributedTitle = NSAttributedString(string: "")
         
-        // 使用原生 title + image + imageBelow 两行布局
-        button.title = timeText
-        button.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        // 创建容器 view，高度固定 22（菜单栏标准高度）
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 44, height: 22))
+        container.autoresizingMask = [.width, .height]
         
+        // 时间标签（第一行，偏上）
+        let timeLabel = NSTextField(labelWithString: timeText)
+        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        timeLabel.textColor = .controlTextColor
+        timeLabel.alignment = .center
+        timeLabel.sizeToFit()
+        timeLabel.frame = NSRect(
+            x: (container.frame.width - timeLabel.frame.width) / 2,
+            y: 10,
+            width: timeLabel.frame.width,
+            height: 11
+        )
+        timeLabel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+        container.addSubview(timeLabel)
+        
+        // 图标（第二行，偏下）
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
-            button.image = image.withSymbolConfiguration(config)
+            let tintedImage = image.withSymbolConfiguration(config)
+            
+            let iconView = NSImageView()
+            iconView.image = tintedImage
+            iconView.imageScaling = .scaleProportionallyDown
+            iconView.setFrameSize(NSSize(width: 10, height: 10))
+            iconView.frame = NSRect(
+                x: (container.frame.width - 10) / 2,
+                y: 1,
+                width: 10,
+                height: 10
+            )
+            iconView.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
+            container.addSubview(iconView)
         }
         
-        button.imagePosition = .imageBelow
-        button.imageHugsTitle = false
+        button.addSubview(container)
     }
     
     @objc func togglePause() {
