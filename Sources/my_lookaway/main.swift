@@ -48,8 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         NSApp.setActivationPolicy(.accessory)
         
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        updateMenuTitle()
+        statusItem = NSStatusBar.system.statusItem(withLength: 64)
         
         // 左键点击弹出设置，右键弹出菜单
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -67,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 默认隐藏菜单，由我们自己控制显示时机
         statusItem.menu?.autoenablesItems = true
         
+        updateMenuTitle()
         startWorkTimer()
     }
     
@@ -129,6 +129,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         let button = statusItem.button!
+        let buttonBounds = button.bounds
         
         // 清理之前的自定义 view
         button.subviews.forEach { $0.removeFromSuperview() }
@@ -136,8 +137,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         button.image = nil
         button.attributedTitle = NSAttributedString(string: "")
         
-        // 创建容器 view，高度固定 22（菜单栏标准高度）
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 44, height: 22))
+        // 创建容器 view，填满 button
+        let container = NSView(frame: buttonBounds)
         container.autoresizingMask = [.width, .height]
         
         // 时间标签（第一行，偏上）
