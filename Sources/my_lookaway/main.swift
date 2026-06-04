@@ -213,7 +213,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         restWindow?.level = .screenSaver
-        restWindow?.backgroundColor = NSColor.black.withAlphaComponent(0.85)
+        restWindow?.backgroundColor = isForceRestMode ? .black : NSColor.black.withAlphaComponent(0.85)
         restWindow?.isOpaque = false
         // 强制模式下忽略鼠标事件，无法点击跳过
         restWindow?.ignoresMouseEvents = isForceRestMode
