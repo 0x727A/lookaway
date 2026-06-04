@@ -70,6 +70,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startWorkTimer()
     }
     
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
+    
     @objc func statusBarButtonClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent!
         if event.type == .rightMouseUp {
