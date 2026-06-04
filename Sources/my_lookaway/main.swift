@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // 可配置的时间
     var workDurationMinutes = 20
     var restDurationSeconds = 20
+    var isForceRestMode = false
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例检查
@@ -131,7 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -143,9 +144,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let hostingView = NSHostingView(rootView: SettingsView(
             workMinutes: workDurationMinutes,
             restSeconds: restDurationSeconds,
-            onSave: { [weak self] work, rest in
+            forceRest: isForceRestMode,
+            onSave: { [weak self] work, rest, force in
                 self?.workDurationMinutes = work
                 self?.restDurationSeconds = rest
+                self?.isForceRestMode = force
                 self?.countdownSeconds = work * 60
                 self?.updateMenuTitle()
                 self?.settingsWindow?.close()
@@ -181,11 +184,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         restWindow?.level = .screenSaver
         restWindow?.backgroundColor = NSColor.black.withAlphaComponent(0.85)
         restWindow?.isOpaque = false
-        restWindow?.ignoresMouseEvents = false
+        // 强制模式下忽略鼠标事件，无法点击跳过
+        restWindow?.ignoresMouseEvents = isForceRestMode
         restWindow?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         
         let hostingView = NSHostingView(rootView: RestView(
             restSeconds: restDurationSeconds,
+            isForceMode: isForceRestMode,
             onSkip: { [weak self] in
                 self?.closeRestWindow()
             }
@@ -225,39 +230,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct SettingsView: View {
     @State var workMinutes: Int
     @State var restSeconds: Int
-    let onSave: (Int, Int) -> Void
+    @State var forceRest: Bool
+    let onSave: (Int, Int, Bool) -> Void
     let onCancel: () -> Void
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Text("⚙️ 设置")
                 .font(.system(size: 20, weight: .bold))
             
-            VStack(alignment: .leading, spacing: 8) {
+            // 工作时间
+            VStack(alignment: .leading, spacing: 6) {
+                Text("工作时间")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
                 HStack {
-                    Text("工作时间")
-                    Spacer()
-                    Text("\(workMinutes) 分钟")
+                    Slider(value: .init(
+                        get: { Double(workMinutes) },
+                        set: { workMinutes = Int($0) }
+                    ), in: 1...60, step: 1)
+                    .frame(width: 160)
+                    
+                    TextField("", value: $workMinutes, formatter: NumberFormatter())
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 50)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("分钟")
+                        .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
-                Slider(value: .init(
-                    get: { Double(workMinutes) },
-                    set: { workMinutes = Int($0) }
-                ), in: 1...60, step: 1)
             }
             
-            VStack(alignment: .leading, spacing: 8) {
+            // 休息时间
+            VStack(alignment: .leading, spacing: 6) {
+                Text("休息时间")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
                 HStack {
-                    Text("休息时间")
-                    Spacer()
-                    Text("\(restSeconds) 秒")
+                    Slider(value: .init(
+                        get: { Double(restSeconds) },
+                        set: { restSeconds = Int($0) }
+                    ), in: 5...120, step: 5)
+                    .frame(width: 160)
+                    
+                    TextField("", value: $restSeconds, formatter: NumberFormatter())
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 50)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("秒")
+                        .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
-                Slider(value: .init(
-                    get: { Double(restSeconds) },
-                    set: { restSeconds = Int($0) }
-                ), in: 5...120, step: 5)
             }
+            
+            // 强制休息模式
+            Toggle("强制休息模式（无法跳过）", isOn: $forceRest)
+                .font(.system(size: 13))
             
             HStack(spacing: 12) {
                 Button("取消") {
@@ -266,19 +296,21 @@ struct SettingsView: View {
                 .keyboardShortcut(.cancelAction)
                 
                 Button("保存") {
-                    onSave(workMinutes, restSeconds)
+                    onSave(workMinutes, restSeconds, forceRest)
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
             }
+            .padding(.top, 8)
         }
         .padding(24)
-        .frame(width: 280)
+        .frame(width: 320)
     }
 }
 
 struct RestView: View {
     let restSeconds: Int
+    let isForceMode: Bool
     let onSkip: () -> Void
     @State private var progress: CGFloat = 1.0
     @State private var remainingText = ""
@@ -310,15 +342,23 @@ struct RestView: View {
                     .foregroundColor(.white)
             }
             
-            Button("跳过休息") {
-                onSkip()
+            // 强制模式下不显示跳过按钮
+            if !isForceMode {
+                Button("跳过休息") {
+                    onSkip()
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Color.white.opacity(0.15))
+                .cornerRadius(8)
+                .foregroundColor(.white)
+            } else {
+                Text("强制休息中，无法跳过")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 8)
             }
-            .buttonStyle(PlainButtonStyle())
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            .background(Color.white.opacity(0.15))
-            .cornerRadius(8)
-            .foregroundColor(.white)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.opacity(0.01))
