@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/0x727a/编程/my_lookaway/.build/arm64-apple-macosx/debug/my_lookaway.build/primary.swiftdeps"
+  },
+  "/Users/0x727a/编程/my_lookaway/Sources/my_lookaway/main.swift": {
+    "dependencies": "/Users/0x727a/编程/my_lookaway/.build/arm64-apple-macosx/debug/my_lookaway.build/main.d",
+    "object": "/Users/0x727a/编程/my_lookaway/.build/arm64-apple-macosx/debug/my_lookaway.build/main.swift.o",
+    "swiftmodule": "/Users/0x727a/编程/my_lookaway/.build/arm64-apple-macosx/debug/my_lookaway.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/0x727a/编程/my_lookaway/.build/arm64-apple-macosx/debug/my_lookaway.build/main.swiftdeps",
+    "diagnostics": "/Users/0x727a/编程/my_lookaway/.build/arm64-apple-macosx/debug/my_lookaway.build/main.dia"
+  }
+}
