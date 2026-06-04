@@ -151,22 +151,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         timeLabel.frame = NSRect(x: 0, y: h - 14, width: w, height: 12)
         container.addSubview(timeLabel)
         
-        // 图标（第二行，偏下，13×13 居中）
+        // 图标（第二行，偏下，14×14 居中）
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
                 .applying(.init(hierarchicalColor: iconColor))
             let tintedImage = image.withSymbolConfiguration(config)
             
-            let iconView = NSImageView()
-            iconView.image = tintedImage
-            iconView.imageScaling = .scaleProportionallyDown
-            let iconSize: CGFloat = 13
-            iconView.frame = NSRect(
+            let iconSize: CGFloat = 14
+            let iconView = NSImageView(frame: NSRect(
                 x: (w - iconSize) / 2,
                 y: 0,
                 width: iconSize,
                 height: iconSize
-            )
+            ))
+            iconView.image = tintedImage
+            iconView.imageScaling = .scaleProportionallyUpOrDown
             container.addSubview(iconView)
         }
         
