@@ -128,35 +128,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             iconColor = .controlTextColor
         }
         
-        // 用 attributedTitle 精确控制两行布局
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = 1
-        paragraphStyle.paragraphSpacingBefore = 0
-        paragraphStyle.paragraphSpacing = 0
+        let button = statusItem.button!
         
-        // 时间在上，10pt
-        let timeAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
-            .paragraphStyle: paragraphStyle,
-            .foregroundColor: NSColor.controlTextColor
-        ]
-        let mutableAttr = NSMutableAttributedString(string: timeText + "\n", attributes: timeAttrs)
+        // 清理之前可能设置的 attributedTitle，避免冲突
+        button.attributedTitle = NSAttributedString(string: "")
         
-        // 图标在下，10pt，通过 bounds 下移避免贴太近
+        // 使用原生 title + image + imageBelow 两行布局
+        button.title = timeText
+        button.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
                 .applying(.init(hierarchicalColor: iconColor))
-            let tintedImage = image.withSymbolConfiguration(config)
-            
-            let attachment = NSTextAttachment()
-            attachment.image = tintedImage
-            attachment.bounds = CGRect(x: 0, y: -1, width: 10, height: 10)
-            let iconAttr = NSAttributedString(attachment: attachment)
-            mutableAttr.append(iconAttr)
+            button.image = image.withSymbolConfiguration(config)
         }
         
-        statusItem.button?.attributedTitle = mutableAttr
+        button.imagePosition = .imageBelow
+        button.imageHugsTitle = false
     }
     
     @objc func togglePause() {
