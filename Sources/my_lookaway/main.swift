@@ -194,6 +194,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         
+        if restWindows.isEmpty {
+            dotPulseOn.toggle()
+        }
+        
         updateMenuTitle()
     }
     
@@ -205,175 +209,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             statusItem.length = 28
         default:
             statusItem.length = 58
-        }
-    }
-    
-    func statusItemWidth() -> CGFloat {
-        switch displayMode {
-        case 1: return 46
-        case 2: return 28
-        default: return 58
-        }
-    }
-    
-    // 当前未使用：由 button.image = NSImage(systemSymbolName:) 替代
-    func renderStatusImage(width: CGFloat) -> NSImage {
-        let minutes = countdownSeconds / 60
-        let seconds = countdownSeconds % 60
-        let timeText = String(format: "%d:%02d", minutes, seconds)
-        
-        // 动态选择 SF Symbol 图标
-        let symbolName: String
-        let iconColor: NSColor
-        
-        if !restWindows.isEmpty {
-            symbolName = "cup.and.saucer.fill"
-            iconColor = .systemOrange
-        } else if isPaused {
-            symbolName = "pause.fill"
-            iconColor = .systemYellow
-        } else if countdownSeconds <= 10 {
-            symbolName = "timer"
-            iconColor = .systemRed
-        } else if countdownSeconds < 60 {
-            symbolName = "timer"
-            iconColor = .systemOrange
-        } else {
-            symbolName = "eye.fill"
-            iconColor = .controlTextColor
-        }
-        
-        let iconPointSize: CGFloat
-        let iconWeight: NSFont.Weight
-        let iconSize: CGFloat
-        let iconY: CGFloat
-        
-        if countdownSeconds < 60 || isPaused || !restWindows.isEmpty {
-            iconPointSize = 13
-            iconWeight = .semibold
-            iconSize = 14
-            iconY = 4
-        } else {
-            iconPointSize = 11
-            iconWeight = .regular
-            iconSize = 12
-            iconY = 5
-        }
-        
-        let h: CGFloat = 22
-        
-        switch displayMode {
-        case 1: // 仅时间
-            let image = NSImage(size: NSSize(width: width, height: h))
-            image.lockFocus()
-            
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: NSColor.controlTextColor
-            ]
-            let attr = NSAttributedString(string: timeText, attributes: attrs)
-            let textSize = attr.size()
-            let textRect = NSRect(
-                x: (width - textSize.width) / 2,
-                y: (h - textSize.height) / 2,
-                width: textSize.width,
-                height: textSize.height
-            )
-            attr.draw(in: textRect)
-            
-            image.unlockFocus()
-            return image
-            
-        case 2: // 极简图标
-            let image = NSImage(size: NSSize(width: width, height: h))
-            image.lockFocus()
-            
-            let compactIconY: CGFloat = iconSize >= 14 ? 7 : 8
-            
-            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                let config = NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: iconWeight)
-                    .applying(.init(paletteColors: [iconColor]))
-                let tinted = symbol.withSymbolConfiguration(config)
-                let iconRect = NSRect(
-                    x: (width - iconSize) / 2,
-                    y: compactIconY,
-                    width: iconSize,
-                    height: iconSize
-                )
-                tinted?.draw(in: iconRect)
-            }
-            
-            // 底部 5 个进度点
-            let activeDots: Int
-            if !restWindows.isEmpty {
-                activeDots = 0
-            } else {
-                let total = max(1, workDurationMinutes * 60)
-                let progress = CGFloat(countdownSeconds) / CGFloat(total)
-                activeDots = max(0, min(5, Int(ceil(progress * 5))))
-            }
-            
-            let pulsingDotIndex = max(0, activeDots - 1)
-            let shouldPulseDots = !isPaused && restWindows.isEmpty && activeDots > 0
-            
-            let dotSize: CGFloat = 2.2
-            let spacing: CGFloat = 2.0
-            let totalWidth = dotSize * 5 + spacing * 4
-            let startX = (width - totalWidth) / 2
-            let dotY: CGFloat = 3
-            
-            for index in 0..<5 {
-                let isActive = index < activeDots
-                let isPulsing = shouldPulseDots && index == pulsingDotIndex
-                let activeAlpha: CGFloat = isPulsing ? (dotPulseOn ? 1.0 : 0.55) : 0.9
-                
-                let color = isActive
-                    ? NSColor.white.withAlphaComponent(activeAlpha)
-                    : NSColor.white.withAlphaComponent(0.28)
-                
-                let dotRect = NSRect(
-                    x: startX + CGFloat(index) * (dotSize + spacing),
-                    y: dotY,
-                    width: dotSize,
-                    height: dotSize
-                )
-                color.setFill()
-                NSBezierPath(ovalIn: dotRect).fill()
-            }
-            
-            image.unlockFocus()
-            return image
-            
-        default: // 0 = 图标+时间
-            let image = NSImage(size: NSSize(width: width, height: h))
-            image.lockFocus()
-            
-            // 图标（左侧）
-            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                let config = NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: iconWeight)
-                    .applying(.init(paletteColors: [iconColor]))
-                let tinted = symbol.withSymbolConfiguration(config)
-                let iconRect = NSRect(x: 9, y: iconY, width: iconSize, height: iconSize)
-                tinted?.draw(in: iconRect)
-            }
-            
-            // 时间（右侧）
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: NSColor.controlTextColor
-            ]
-            let attr = NSAttributedString(string: timeText, attributes: attrs)
-            let textSize = attr.size()
-            let textRect = NSRect(
-                x: 20,
-                y: (h - textSize.height) / 2,
-                width: 40,
-                height: textSize.height
-            )
-            attr.draw(in: textRect)
-            
-            image.unlockFocus()
-            return image
         }
     }
     
@@ -413,16 +248,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case 1: // 仅时间
             button.title = timeText
             button.image = nil
-        case 2: // 极简图标（只显示图标，无进度点）
+        case 2: // 极简图标 + 底部进度点
             button.title = ""
             button.imagePosition = .imageOnly
-            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                let config = NSImage.SymbolConfiguration(pointSize: 12, weight: iconWeight)
-                    .applying(.init(hierarchicalColor: iconColor))
-                button.image = image.withSymbolConfiguration(config)
-            } else {
-                button.image = nil
-            }
+            button.image = renderMinimalImage(
+                symbolName: symbolName,
+                iconColor: iconColor,
+                iconWeight: iconWeight
+            )
         default: // 0=图标+时间
             button.title = timeText
             button.imagePosition = .imageLeading
@@ -434,6 +267,69 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 button.image = nil
             }
         }
+    }
+    
+    func renderMinimalImage(symbolName: String, iconColor: NSColor, iconWeight: NSFont.Weight) -> NSImage {
+        let w: CGFloat = 28
+        let h: CGFloat = 22
+        let image = NSImage(size: NSSize(width: w, height: h))
+        image.lockFocus()
+        
+        // 画图标（上方居中）
+        if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 11, weight: iconWeight)
+                .applying(.init(hierarchicalColor: iconColor))
+            let tinted = symbol.withSymbolConfiguration(config)
+            let iconSize: CGFloat = 12
+            let iconRect = NSRect(
+                x: (w - iconSize) / 2,
+                y: 8,
+                width: iconSize,
+                height: iconSize
+            )
+            tinted?.draw(in: iconRect)
+        }
+        
+        // 底部 5 个进度点
+        let activeDots: Int
+        if !restWindows.isEmpty {
+            activeDots = 0
+        } else {
+            let total = max(1, workDurationMinutes * 60)
+            let progress = CGFloat(countdownSeconds) / CGFloat(total)
+            activeDots = max(0, min(5, Int(ceil(progress * 5))))
+        }
+        
+        let pulsingDotIndex = max(0, activeDots - 1)
+        let shouldPulseDots = displayMode == 2 && !isPaused && restWindows.isEmpty && activeDots > 0
+        
+        let dotSize: CGFloat = 2.2
+        let spacing: CGFloat = 2.0
+        let totalWidth = dotSize * 5 + spacing * 4
+        let startX = (w - totalWidth) / 2
+        let dotY: CGFloat = 3
+        
+        for index in 0..<5 {
+            let isActive = index < activeDots
+            let isPulsing = shouldPulseDots && index == pulsingDotIndex
+            let activeAlpha: CGFloat = isPulsing ? (dotPulseOn ? 1.0 : 0.55) : 0.9
+            
+            let color = isActive
+                ? NSColor.white.withAlphaComponent(activeAlpha)
+                : NSColor.white.withAlphaComponent(0.28)
+            
+            let dotRect = NSRect(
+                x: startX + CGFloat(index) * (dotSize + spacing),
+                y: dotY,
+                width: dotSize,
+                height: dotSize
+            )
+            color.setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
+        }
+        
+        image.unlockFocus()
+        return image
     }
     
     @objc func togglePause() {
