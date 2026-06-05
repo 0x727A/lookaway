@@ -1,5 +1,14 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
+
+enum DefaultsKey {
+    static let workDurationMinutes = "LookAway.workDurationMinutes"
+    static let restDurationSeconds = "LookAway.restDurationSeconds"
+    static let isForceRestMode = "LookAway.isForceRestMode"
+    static let playSoundOnRestEnd = "LookAway.playSoundOnRestEnd"
+    static let displayMode = "LookAway.displayMode"
+}
 
 @main
 struct LookAwayApp: App {
@@ -13,80 +22,158 @@ struct LookAwayApp: App {
 }
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+final class RestSession: ObservableObject {
+    @Published var remainingSeconds: Int
+    @Published var progress: CGFloat = 1
+    
+    private let duration: Int
+    private let startTime = Date()
+    private var timer: Timer?
+    private let onComplete: () -> Void
+    
+    init(duration: Int, onComplete: @escaping () -> Void) {
+        let safeDuration = max(1, duration)
+        self.duration = safeDuration
+        self.remainingSeconds = safeDuration
+        self.onComplete = onComplete
+        start()
+    }
+    
+    func start() {
+        timer?.invalidate()
+        timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        RunLoop.main.add(timer!, forMode: .common)
+    }
+    
+    func tick() {
+        let elapsed = Date().timeIntervalSince(startTime)
+        let remaining = max(0, Double(duration) - elapsed)
+        
+        remainingSeconds = Int(ceil(remaining))
+        progress = CGFloat(remaining / Double(duration))
+        
+        if remaining <= 0 {
+            progress = 0
+            remainingSeconds = 0
+            timer?.invalidate()
+            timer = nil
+            onComplete()
+        }
+    }
+    
+    func invalidate() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
+@MainActor
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusItem: NSStatusItem!
     var workTimer: Timer?
-    var restWindow: NSWindow?
-    var restTimer: Timer?
+    var restWindows: [NSWindow] = []
+    var restSession: RestSession?
     var settingsWindow: NSWindow?
+    var todayRestCount = 0
+    var todayRestSeconds = 0
+    var todaySkipCount = 0
     var countdownSeconds = 20 * 60
     var isPaused = false
+    var workEndDate: Date?
     
     // 可配置的时间
     var workDurationMinutes = 20
     var restDurationSeconds = 20
     var isForceRestMode = false
+    var playSoundOnRestEnd = true
+    var launchAtLogin = false
+    var displayMode = 0 // 0=图标+时间, 1=仅时间, 2=极简图标
+    var dotPulseOn = false
+    var singleClickWorkItem: DispatchWorkItem?
+    var pendingShowSettings = false
+
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例检查
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.lookaway.app"
         let currentPID = ProcessInfo.processInfo.processIdentifier
-        let task = Process()
-        task.launchPath = "/usr/bin/pgrep"
-        task.arguments = ["-f", "my_lookaway"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        try? task.run()
-        task.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        if let output = String(data: data, encoding: .utf8) {
-            let pids = output.split(separator: "\n").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-            if pids.contains(where: { $0 != currentPID }) {
-                NSApp.terminate(nil)
-                return
-            }
+        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        let otherInstances = runningApps.filter { $0.processIdentifier != currentPID }
+        if !otherInstances.isEmpty {
+            otherInstances.first?.activate(options: [])
+            NSApp.terminate(nil)
+            return
+        }
+        
+        // 进程名兜底：防止旧包 bundle id 不同也能同时运行
+        let runningLookAwayApps = NSWorkspace.shared.runningApplications.filter {
+            $0.processIdentifier != currentPID &&
+            ($0.localizedName == "LookAway" || $0.bundleURL?.lastPathComponent == "LookAway.app")
+        }
+        if !runningLookAwayApps.isEmpty {
+            runningLookAwayApps.first?.activate(options: [])
+            NSApp.terminate(nil)
+            return
         }
         
         NSApp.setActivationPolicy(.accessory)
         
-        statusItem = NSStatusBar.system.statusItem(withLength: 44)
+        // 加载持久化设置
+        let defaults = UserDefaults.standard
+        workDurationMinutes = defaults.object(forKey: DefaultsKey.workDurationMinutes) as? Int ?? 20
+        restDurationSeconds = defaults.object(forKey: DefaultsKey.restDurationSeconds) as? Int ?? 20
+        isForceRestMode = defaults.object(forKey: DefaultsKey.isForceRestMode) as? Bool ?? false
+        playSoundOnRestEnd = defaults.object(forKey: DefaultsKey.playSoundOnRestEnd) as? Bool ?? true
+        displayMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
+        countdownSeconds = workDurationMinutes * 60
         
-        // 左键点击弹出设置，右键弹出菜单
-        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        statusItem.button?.action = #selector(statusBarButtonClicked(_:))
-        statusItem.button?.target = self
+        statusItem = NSStatusBar.system.statusItem(withLength: 58)
+        statusItem.button?.title = "LookAway"
+        statusItem.button?.image = nil
+        applyStatusItemLength()
         
+        // 原生菜单
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "开始/暂停", action: #selector(togglePause), keyEquivalent: "s"))
-        menu.addItem(NSMenuItem(title: "立即休息", action: #selector(startRestNow), keyEquivalent: "r"))
-        menu.addItem(NSMenuItem(title: "设置", action: #selector(showSettings), keyEquivalent: ","))
+        let pauseItem = NSMenuItem(title: "开始/暂停", action: nil, keyEquivalent: "")
+        pauseItem.target = self
+        pauseItem.action = #selector(togglePause)
+        menu.addItem(pauseItem)
+        let restItem = NSMenuItem(title: "立即休息", action: nil, keyEquivalent: "")
+        restItem.target = self
+        restItem.action = #selector(startRestNow)
+        menu.addItem(restItem)
+        let settingsItem = NSMenuItem(title: "设置...", action: nil, keyEquivalent: "")
+        settingsItem.target = self
+        settingsItem.action = #selector(showSettings)
+        menu.addItem(settingsItem)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q"))
+        let quitItem = NSMenuItem(title: "退出", action: nil, keyEquivalent: "")
+        quitItem.target = self
+        quitItem.action = #selector(quit)
+        menu.addItem(quitItem)
         statusItem.menu = menu
         
-        // 默认隐藏菜单，由我们自己控制显示时机
-        statusItem.menu?.autoenablesItems = true
-        
-        updateMenuTitle()
         startWorkTimer()
+        
+        // 监听系统睡眠/唤醒
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
     
-    @objc func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        let event = NSApp.currentEvent!
-        if event.type == .rightMouseUp {
-            statusItem.menu?.autoenablesItems = true
-            statusItem.button?.performClick(nil)
-        } else {
-            // 左键点击：弹出设置窗口
-            showSettingsWindow()
-        }
-    }
-    
     func startWorkTimer() {
         workTimer?.invalidate()
+        workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
+        
         workTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
@@ -96,16 +183,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func tick() {
         guard !isPaused else { return }
+        guard let endDate = workEndDate else { return }
         
-        countdownSeconds -= 1
+        countdownSeconds = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
+        
         if countdownSeconds <= 0 {
             countdownSeconds = workDurationMinutes * 60
+            workEndDate = nil
             showRestWindow()
+            return
         }
+        
         updateMenuTitle()
     }
     
-    func updateMenuTitle() {
+    func applyStatusItemLength() {
+        switch displayMode {
+        case 1:
+            statusItem.length = 46
+        case 2:
+            statusItem.length = 28
+        default:
+            statusItem.length = 58
+        }
+    }
+    
+    func statusItemWidth() -> CGFloat {
+        switch displayMode {
+        case 1: return 46
+        case 2: return 28
+        default: return 58
+        }
+    }
+    
+    // 当前未使用：由 button.image = NSImage(systemSymbolName:) 替代
+    func renderStatusImage(width: CGFloat) -> NSImage {
         let minutes = countdownSeconds / 60
         let seconds = countdownSeconds % 60
         let timeText = String(format: "%d:%02d", minutes, seconds)
@@ -114,76 +226,259 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let symbolName: String
         let iconColor: NSColor
         
-        if restWindow != nil {
+        if !restWindows.isEmpty {
             symbolName = "cup.and.saucer.fill"
             iconColor = .systemOrange
         } else if isPaused {
             symbolName = "pause.fill"
             iconColor = .systemYellow
-        } else if countdownSeconds < 60 {
-            symbolName = "exclamationmark.triangle.fill"
+        } else if countdownSeconds <= 10 {
+            symbolName = "timer"
             iconColor = .systemRed
+        } else if countdownSeconds < 60 {
+            symbolName = "timer"
+            iconColor = .systemOrange
         } else {
-            symbolName = "sunglasses.fill"
+            symbolName = "eye.fill"
             iconColor = .controlTextColor
         }
         
-        guard let button = statusItem.button else { return }
+        let iconPointSize: CGFloat
+        let iconWeight: NSFont.Weight
+        let iconSize: CGFloat
+        let iconY: CGFloat
         
-        // 清理之前的自定义 view
-        button.subviews.forEach { $0.removeFromSuperview() }
-        button.title = ""
-        button.image = nil
-        button.attributedTitle = NSAttributedString(string: "")
-        
-        let w: CGFloat = 44
-        let h = button.bounds.height > 0 ? button.bounds.height : 24
-        
-        // 创建容器 view
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
-        container.autoresizingMask = [.width, .height]
-        
-        // 时间标签（第一行，偏上，y = h - 14 避免顶部被裁）
-        let timeLabel = NSTextField(labelWithString: timeText)
-        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        timeLabel.textColor = .controlTextColor
-        timeLabel.alignment = .center
-        timeLabel.frame = NSRect(x: 0, y: h - 14, width: w, height: 12)
-        container.addSubview(timeLabel)
-        
-        // 图标（第二行，偏下，14×14 居中）
-        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-                .applying(.init(hierarchicalColor: iconColor))
-            let tintedImage = image.withSymbolConfiguration(config)
-            
-            let iconSize: CGFloat = 14
-            let iconView = NSImageView(frame: NSRect(
-                x: (w - iconSize) / 2,
-                y: 0,
-                width: iconSize,
-                height: iconSize
-            ))
-            iconView.image = tintedImage
-            iconView.imageScaling = .scaleProportionallyUpOrDown
-            container.addSubview(iconView)
+        if countdownSeconds < 60 || isPaused || !restWindows.isEmpty {
+            iconPointSize = 13
+            iconWeight = .semibold
+            iconSize = 14
+            iconY = 4
+        } else {
+            iconPointSize = 11
+            iconWeight = .regular
+            iconSize = 12
+            iconY = 5
         }
         
-        button.addSubview(container)
+        let h: CGFloat = 22
+        
+        switch displayMode {
+        case 1: // 仅时间
+            let image = NSImage(size: NSSize(width: width, height: h))
+            image.lockFocus()
+            
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: NSColor.controlTextColor
+            ]
+            let attr = NSAttributedString(string: timeText, attributes: attrs)
+            let textSize = attr.size()
+            let textRect = NSRect(
+                x: (width - textSize.width) / 2,
+                y: (h - textSize.height) / 2,
+                width: textSize.width,
+                height: textSize.height
+            )
+            attr.draw(in: textRect)
+            
+            image.unlockFocus()
+            return image
+            
+        case 2: // 极简图标
+            let image = NSImage(size: NSSize(width: width, height: h))
+            image.lockFocus()
+            
+            let compactIconY: CGFloat = iconSize >= 14 ? 7 : 8
+            
+            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: iconWeight)
+                    .applying(.init(paletteColors: [iconColor]))
+                let tinted = symbol.withSymbolConfiguration(config)
+                let iconRect = NSRect(
+                    x: (width - iconSize) / 2,
+                    y: compactIconY,
+                    width: iconSize,
+                    height: iconSize
+                )
+                tinted?.draw(in: iconRect)
+            }
+            
+            // 底部 5 个进度点
+            let activeDots: Int
+            if !restWindows.isEmpty {
+                activeDots = 0
+            } else {
+                let total = max(1, workDurationMinutes * 60)
+                let progress = CGFloat(countdownSeconds) / CGFloat(total)
+                activeDots = max(0, min(5, Int(ceil(progress * 5))))
+            }
+            
+            let pulsingDotIndex = max(0, activeDots - 1)
+            let shouldPulseDots = !isPaused && restWindows.isEmpty && activeDots > 0
+            
+            let dotSize: CGFloat = 2.2
+            let spacing: CGFloat = 2.0
+            let totalWidth = dotSize * 5 + spacing * 4
+            let startX = (width - totalWidth) / 2
+            let dotY: CGFloat = 3
+            
+            for index in 0..<5 {
+                let isActive = index < activeDots
+                let isPulsing = shouldPulseDots && index == pulsingDotIndex
+                let activeAlpha: CGFloat = isPulsing ? (dotPulseOn ? 1.0 : 0.55) : 0.9
+                
+                let color = isActive
+                    ? NSColor.white.withAlphaComponent(activeAlpha)
+                    : NSColor.white.withAlphaComponent(0.28)
+                
+                let dotRect = NSRect(
+                    x: startX + CGFloat(index) * (dotSize + spacing),
+                    y: dotY,
+                    width: dotSize,
+                    height: dotSize
+                )
+                color.setFill()
+                NSBezierPath(ovalIn: dotRect).fill()
+            }
+            
+            image.unlockFocus()
+            return image
+            
+        default: // 0 = 图标+时间
+            let image = NSImage(size: NSSize(width: width, height: h))
+            image.lockFocus()
+            
+            // 图标（左侧）
+            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: iconWeight)
+                    .applying(.init(paletteColors: [iconColor]))
+                let tinted = symbol.withSymbolConfiguration(config)
+                let iconRect = NSRect(x: 9, y: iconY, width: iconSize, height: iconSize)
+                tinted?.draw(in: iconRect)
+            }
+            
+            // 时间（右侧）
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: NSColor.controlTextColor
+            ]
+            let attr = NSAttributedString(string: timeText, attributes: attrs)
+            let textSize = attr.size()
+            let textRect = NSRect(
+                x: 20,
+                y: (h - textSize.height) / 2,
+                width: 40,
+                height: textSize.height
+            )
+            attr.draw(in: textRect)
+            
+            image.unlockFocus()
+            return image
+        }
+    }
+    
+    func updateMenuTitle() {
+        guard let button = statusItem.button else { return }
+        
+        let minutes = countdownSeconds / 60
+        let seconds = countdownSeconds % 60
+        let timeText = String(format: "%d:%02d", minutes, seconds)
+        
+        let symbolName: String
+        let iconColor: NSColor
+        let iconWeight: NSFont.Weight
+        if !restWindows.isEmpty {
+            symbolName = "cup.and.saucer.fill"
+            iconColor = .systemOrange
+            iconWeight = .regular
+        } else if isPaused {
+            symbolName = "pause.fill"
+            iconColor = .white
+            iconWeight = .semibold
+        } else if countdownSeconds <= 10 {
+            symbolName = "timer"
+            iconColor = .white
+            iconWeight = .semibold
+        } else if countdownSeconds < 60 {
+            symbolName = "timer"
+            iconColor = .white
+            iconWeight = .bold
+        } else {
+            symbolName = "eye.fill"
+            iconColor = .controlTextColor
+            iconWeight = .regular
+        }
+        
+        switch displayMode {
+        case 1: // 仅时间
+            button.title = timeText
+            button.image = nil
+        case 2: // 极简图标（只显示图标，无进度点）
+            button.title = ""
+            button.imagePosition = .imageOnly
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 12, weight: iconWeight)
+                    .applying(.init(hierarchicalColor: iconColor))
+                button.image = image.withSymbolConfiguration(config)
+            } else {
+                button.image = nil
+            }
+        default: // 0=图标+时间
+            button.title = timeText
+            button.imagePosition = .imageLeading
+            if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 12, weight: iconWeight)
+                    .applying(.init(hierarchicalColor: iconColor))
+                button.image = image.withSymbolConfiguration(config)
+            } else {
+                button.image = nil
+            }
+        }
     }
     
     @objc func togglePause() {
-        isPaused.toggle()
+        if isPaused {
+            isPaused = false
+            workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
+        } else {
+            if let endDate = workEndDate {
+                countdownSeconds = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
+            }
+            isPaused = true
+            workEndDate = nil
+        }
+        updateMenuTitle()
+    }
+    
+    @objc func systemDidWake() {
+        guard restWindows.isEmpty else { return }
+        countdownSeconds = workDurationMinutes * 60
+        if isPaused {
+            workEndDate = nil
+        } else {
+            workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
+        }
         updateMenuTitle()
     }
     
     @objc func startRestNow() {
-        countdownSeconds = 0
-        tick()
+        countdownSeconds = workDurationMinutes * 60
+        workEndDate = nil
+        showRestWindow()
+        updateMenuTitle()
     }
     
     @objc func showSettings() {
-        showSettingsWindow()
+        singleClickWorkItem?.cancel()
+        singleClickWorkItem = nil
+        
+        guard !pendingShowSettings else { return }
+        pendingShowSettings = true
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.pendingShowSettings = false
+            self?.showSettingsWindow()
+        }
     }
     
     func showSettingsWindow() {
@@ -192,8 +487,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
+        launchAtLogin = isLaunchAtLoginOnOrPending()
+        
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 400),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -201,23 +498,58 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "设置"
         window.level = .floating
         window.center()
+        window.isReleasedWhenClosed = false
+        window.delegate = self
         
         let hostingView = NSHostingView(rootView: SettingsView(
             workMinutes: workDurationMinutes,
             restSeconds: restDurationSeconds,
             forceRest: isForceRestMode,
-            onSave: { [weak self] work, rest, force in
-                self?.workDurationMinutes = work
-                self?.restDurationSeconds = rest
+            playSound: playSoundOnRestEnd,
+            launchAtLogin: launchAtLogin,
+            displayMode: displayMode,
+            onSave: { [weak self] work, rest, force, play, mode in
+                let safeWork = max(1, work)
+                let safeRest = max(5, rest)
+                
+                let oldWorkDuration = self?.workDurationMinutes
+                let workDurationChanged = oldWorkDuration != safeWork
+                
+                let defaults = UserDefaults.standard
+                defaults.set(safeWork, forKey: DefaultsKey.workDurationMinutes)
+                defaults.set(safeRest, forKey: DefaultsKey.restDurationSeconds)
+                defaults.set(force, forKey: DefaultsKey.isForceRestMode)
+                defaults.set(play, forKey: DefaultsKey.playSoundOnRestEnd)
+                defaults.set(mode, forKey: DefaultsKey.displayMode)
+                
+                self?.workDurationMinutes = safeWork
+                self?.restDurationSeconds = safeRest
                 self?.isForceRestMode = force
-                self?.countdownSeconds = work * 60
+                self?.playSoundOnRestEnd = play
+                self?.displayMode = mode
+                
+                if mode == 2 {
+                    self?.dotPulseOn = true
+                }
+                
+                if workDurationChanged {
+                    self?.countdownSeconds = safeWork * 60
+                    if self?.isPaused == false && self?.restWindows.isEmpty == true {
+                        self?.workEndDate = Date().addingTimeInterval(TimeInterval(safeWork * 60))
+                    } else {
+                        self?.workEndDate = nil
+                    }
+                }
+                
+                self?.applyStatusItemLength()
                 self?.updateMenuTitle()
-                self?.settingsWindow?.orderOut(nil)
-                self?.settingsWindow = nil
+                self?.settingsWindow?.close()
             },
             onCancel: { [weak self] in
-                self?.settingsWindow?.orderOut(nil)
-                self?.settingsWindow = nil
+                self?.settingsWindow?.close()
+            },
+            onLaunchAtLoginChange: { [weak self] enabled in
+                self?.setLaunchAtLogin(enabled) ?? false
             }
         ))
         window.contentView = hostingView
@@ -227,61 +559,132 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
     
+    func windowWillClose(_ notification: Notification) {
+        guard notification.object as? NSWindow === settingsWindow else { return }
+        
+        let window = settingsWindow
+        window?.delegate = nil
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            window?.contentView = nil
+            self?.settingsWindow = nil
+        }
+    }
+    
     func showRestWindow() {
-        guard restWindow == nil else { return }
+        guard restWindows.isEmpty else { return }
         
         workTimer?.invalidate()
         workTimer = nil
         
-        let screen = NSScreen.main!
-        let frame = screen.frame
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else {
+            startWorkTimer()
+            return
+        }
         
-        restWindow = NSWindow(
-            contentRect: frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        restWindow?.level = .screenSaver
-        restWindow?.backgroundColor = isForceRestMode ? .black : NSColor.black.withAlphaComponent(0.85)
-        restWindow?.isOpaque = false
-        // 强制模式下忽略鼠标事件，无法点击跳过
-        restWindow?.ignoresMouseEvents = isForceRestMode
-        restWindow?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        restSession = RestSession(duration: restDurationSeconds) { [weak self] in
+            self?.closeRestWindow(playSound: self?.playSoundOnRestEnd ?? true, skipped: false)
+        }
         
-        let hostingView = NSHostingView(rootView: RestView(
-            restSeconds: restDurationSeconds,
-            isForceMode: isForceRestMode,
-            onSkip: { [weak self] in
-                self?.closeRestWindow()
-            }
-        ))
-        hostingView.frame = frame
-        restWindow?.contentView = hostingView
-        restWindow?.makeKeyAndOrderFront(nil)
+        guard let session = restSession else {
+            startWorkTimer()
+            return
+        }
         
-        let startTime = Date()
-        restTimer?.invalidate()
-        restTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                let elapsed = Date().timeIntervalSince(startTime)
-                let remaining = max(0, (self?.restDurationSeconds ?? 20) - Int(elapsed))
-                if remaining <= 0 {
-                    self?.closeRestWindow()
+        for screen in screens {
+            let frame = screen.frame
+            
+            let window = NSWindow(
+                contentRect: frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .screenSaver
+            window.backgroundColor = isForceRestMode ? .black : NSColor.black.withAlphaComponent(0.85)
+            window.isOpaque = false
+            window.ignoresMouseEvents = isForceRestMode
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            
+            let hostingView = NSHostingView(rootView: RestView(
+                session: session,
+                isForceMode: isForceRestMode,
+                onSkip: { [weak self] in
+                    self?.closeRestWindow(playSound: false, skipped: true)
                 }
-            }
+            ))
+            hostingView.frame = NSRect(origin: .zero, size: frame.size)
+            hostingView.autoresizingMask = [.width, .height]
+            window.contentView = hostingView
+            window.makeKeyAndOrderFront(nil)
+            
+            restWindows.append(window)
         }
     }
     
-    func closeRestWindow() {
-        restTimer?.invalidate()
-        restTimer = nil
-        restWindow?.orderOut(nil)
-        restWindow = nil
+    func closeRestWindow(playSound: Bool = false, skipped: Bool = false) {
+        guard !restWindows.isEmpty else { return }
+        
+        if skipped {
+            todaySkipCount += 1
+        } else {
+            todayRestCount += 1
+            todayRestSeconds += restDurationSeconds
+        }
+        
+        if playSound {
+            NSSound(named: "Glass")?.play()
+        }
+        restSession?.invalidate()
+        restSession = nil
+        for window in restWindows {
+            window.orderOut(nil)
+        }
+        restWindows.removeAll()
         countdownSeconds = workDurationMinutes * 60
         updateMenuTitle()
         startWorkTimer()
     }
+    
+    func isLaunchAtLoginOnOrPending() -> Bool {
+        let status = SMAppService.mainApp.status
+        return status == .enabled || status == .requiresApproval
+    }
+    
+    func setLaunchAtLogin(_ enabled: Bool) -> Bool {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            showLaunchAtLoginError(error)
+        }
+        
+        let status = SMAppService.mainApp.status
+        if enabled && status == .requiresApproval {
+            let alert = NSAlert()
+            alert.messageText = "需要授权"
+            alert.informativeText = "请在 系统设置 > 通用 > 登录项 中允许 LookAway。"
+            alert.alertStyle = .informational
+            alert.runModal()
+        }
+        
+        launchAtLogin = isLaunchAtLoginOnOrPending()
+        return launchAtLogin
+    }
+    
+    func showLaunchAtLoginError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "无法设置登录时启动"
+        alert.informativeText = "请先将 LookAway.app 移动到「应用程序」文件夹后再开启。错误：\(error.localizedDescription)"
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+    
+
     
     @objc func quit() {
         NSApplication.shared.terminate(nil)
@@ -292,8 +695,12 @@ struct SettingsView: View {
     @State var workMinutes: Int
     @State var restSeconds: Int
     @State var forceRest: Bool
-    let onSave: (Int, Int, Bool) -> Void
+    @State var playSound: Bool
+    @State var launchAtLogin: Bool
+    @State var displayMode: Int
+    let onSave: (Int, Int, Bool, Bool, Int) -> Void
     let onCancel: () -> Void
+    let onLaunchAtLoginChange: (Bool) -> Bool
     
     var body: some View {
         VStack(spacing: 16) {
@@ -350,6 +757,34 @@ struct SettingsView: View {
             Toggle("强制休息模式（无法跳过）", isOn: $forceRest)
                 .font(.system(size: 13))
             
+            // 休息结束提示音
+            Toggle("休息结束播放提示音", isOn: $playSound)
+                .font(.system(size: 13))
+            
+            // 登录时启动
+            Toggle("登录时启动", isOn: Binding(
+                get: { launchAtLogin },
+                set: { newValue in
+                    let actualValue = onLaunchAtLoginChange(newValue)
+                    launchAtLogin = actualValue
+                }
+            ))
+            .font(.system(size: 13))
+            
+            // 显示模式
+            VStack(alignment: .leading, spacing: 6) {
+                Text("菜单栏显示")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                Picker("", selection: $displayMode) {
+                    Text("图标+时间").tag(0)
+                    Text("仅时间").tag(1)
+                    Text("极简图标").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 260)
+            }
+            
             HStack(spacing: 12) {
                 Button("取消") {
                     onCancel()
@@ -357,7 +792,11 @@ struct SettingsView: View {
                 .keyboardShortcut(.cancelAction)
                 
                 Button("保存") {
-                    onSave(workMinutes, restSeconds, forceRest)
+                    let clampedWork = max(1, workMinutes)
+                    let clampedRest = max(5, restSeconds)
+                    workMinutes = clampedWork
+                    restSeconds = clampedRest
+                    onSave(clampedWork, clampedRest, forceRest, playSound, displayMode)
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
@@ -370,11 +809,9 @@ struct SettingsView: View {
 }
 
 struct RestView: View {
-    let restSeconds: Int
+    @ObservedObject var session: RestSession
     let isForceMode: Bool
     let onSkip: () -> Void
-    @State private var progress: CGFloat = 1.0
-    @State private var remainingText = ""
     
     var body: some View {
         VStack(spacing: 30) {
@@ -392,13 +829,13 @@ struct RestView: View {
                     .frame(width: 120, height: 120)
                 
                 Circle()
-                    .trim(from: 0, to: progress)
+                    .trim(from: 0, to: session.progress)
                     .stroke(Color.green, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .frame(width: 120, height: 120)
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: progress)
+                    .animation(.linear(duration: 0.1), value: session.progress)
                 
-                Text(remainingText)
+                Text("\(session.remainingSeconds)")
                     .font(.system(size: 36, weight: .bold))
                     .foregroundColor(.white)
             }
@@ -423,23 +860,46 @@ struct RestView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.opacity(0.01))
-        .onAppear {
-            remainingText = String(restSeconds)
-            let startTime = Date()
-            var timer: Timer?
-            timer = Timer(timeInterval: 0.1, repeats: true) { _ in
-                Task { @MainActor in
-                    let elapsed = Date().timeIntervalSince(startTime)
-                    let seconds = max(0, restSeconds - Int(elapsed))
-                    progress = CGFloat(seconds) / CGFloat(restSeconds)
-                    remainingText = String(seconds)
-                    if seconds <= 0 {
-                        timer?.invalidate()
-                        timer = nil
-                    }
-                }
+    }
+}
+
+// 当前未使用：由原生 NSMenu 替代
+struct StatusMenuView: View {
+    let todayRestCount: Int
+    let todayRestSeconds: Int
+    let todaySkipCount: Int
+    let onTogglePause: () -> Void
+    let onStartRest: () -> Void
+    let onSettings: () -> Void
+    let onQuit: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            let minutes = todayRestSeconds / 60
+            let seconds = todayRestSeconds % 60
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("今日休息  \(todayRestCount) 次")
+                Text("累计时间  \(minutes) 分 \(seconds) 秒")
+                Text("跳过次数  \(todaySkipCount) 次")
             }
-            RunLoop.current.add(timer!, forMode: .common)
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            
+            Divider()
+            
+            Button("开始/暂停", action: onTogglePause)
+            Button("立即休息", action: onStartRest)
+            Button("设置...", action: onSettings)
+            Divider()
+            Button("退出", action: onQuit)
         }
+        .buttonStyle(.plain)
+        .padding(.vertical, 6)
+        .frame(width: 260, alignment: .leading)
+        .background(Color(NSColor.windowBackgroundColor))
+        .cornerRadius(8)
     }
 }
