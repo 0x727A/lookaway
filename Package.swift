@@ -5,7 +5,7 @@ let package = Package(
     name: "my_lookaway",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "my_lookaway", targets: ["my_lookaway"])
+        .executable(name: "LookAway", targets: ["my_lookaway"])
     ],
     targets: [
         .executableTarget(
