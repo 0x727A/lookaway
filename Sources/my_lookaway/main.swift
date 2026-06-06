@@ -390,9 +390,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     
+    func bringSettingsWindowToFront(_ window: NSWindow) {
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        window.makeKeyAndOrderFront(nil)
+    }
+    
     func showSettingsWindow() {
         guard settingsWindow == nil else {
-            settingsWindow?.makeKeyAndOrderFront(nil)
+            if let window = settingsWindow {
+                bringSettingsWindowToFront(window)
+            }
             return
         }
         
@@ -462,12 +473,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.contentView = hostingView
         
         settingsWindow = window
-        window.makeKeyAndOrderFront(nil)
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        bringSettingsWindowToFront(window)
     }
     
     func windowWillClose(_ notification: Notification) {
