@@ -90,8 +90,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var dotPulseOn = false
     var singleClickWorkItem: DispatchWorkItem?
     var pendingShowSettings = false
+    var quitMenuItem: NSMenuItem?
 
-    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例检查
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.lookaway.app"
@@ -145,11 +145,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settingsItem.action = #selector(showSettings)
         menu.addItem(settingsItem)
         menu.addItem(NSMenuItem.separator())
-        let quitItem = NSMenuItem(title: "退出", action: nil, keyEquivalent: "")
+        let quitItem = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "")
         quitItem.target = self
-        quitItem.action = #selector(quit)
         menu.addItem(quitItem)
+        quitMenuItem = quitItem
         statusItem.menu = menu
+        updateMenuState()
         
         startWorkTimer()
         
@@ -338,11 +339,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func togglePause() {
         if isPaused {
             isPaused = false
-            workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
+            startWorkTimer()
         } else {
             if let endDate = workEndDate {
                 countdownSeconds = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
             }
+            workTimer?.invalidate()
+            workTimer = nil
             isPaused = true
             workEndDate = nil
         }
@@ -426,6 +429,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self?.isForceRestMode = force
                 self?.playSoundOnRestEnd = play
                 self?.displayMode = mode
+                self?.updateMenuState()
                 
                 if mode == 2 {
                     self?.dotPulseOn = true
@@ -507,7 +511,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.level = .screenSaver
             window.backgroundColor = isForceRestMode ? .black : NSColor.black.withAlphaComponent(0.85)
             window.isOpaque = false
-            window.ignoresMouseEvents = isForceRestMode
+            window.ignoresMouseEvents = false // 始终拦截底层点击，跳过按钮由 RestView 控制
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             
             let hostingView = NSHostingView(rootView: RestView(
@@ -524,6 +528,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             
             restWindows.append(window)
         }
+        
+        updateMenuState()
     }
     
     func closeRestWindow(playSound: Bool = false, skipped: Bool = false) {
@@ -538,9 +544,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.orderOut(nil)
         }
         restWindows.removeAll()
+        updateMenuState()
         countdownSeconds = workDurationMinutes * 60
         updateMenuTitle()
-        startWorkTimer()
+        if !isPaused {
+            startWorkTimer()
+        }
     }
     
     func isLaunchAtLoginOnOrPending() -> Bool {
@@ -581,8 +590,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
 
+    func updateMenuState() {
+        let isForceResting = isForceRestMode && !restWindows.isEmpty
+        quitMenuItem?.isEnabled = !isForceResting
+    }
     
     @objc func quit() {
+        guard !(isForceRestMode && !restWindows.isEmpty) else { return }
         NSApplication.shared.terminate(nil)
     }
 }
@@ -611,11 +625,14 @@ struct SettingsView: View {
                 HStack {
                     Slider(value: .init(
                         get: { Double(workMinutes) },
-                        set: { workMinutes = Int($0) }
+                        set: { workMinutes = min(max(Int($0), 1), 60) }
                     ), in: 1...60, step: 1)
                     .frame(width: 160)
                     
-                    TextField("", value: $workMinutes, formatter: NumberFormatter())
+                    TextField("", value: .init(
+                        get: { workMinutes },
+                        set: { workMinutes = min(max($0, 1), 60) }
+                    ), formatter: NumberFormatter())
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 50)
                         .multilineTextAlignment(.center)
@@ -634,11 +651,14 @@ struct SettingsView: View {
                 HStack {
                     Slider(value: .init(
                         get: { Double(restSeconds) },
-                        set: { restSeconds = Int($0) }
+                        set: { restSeconds = min(max(Int($0), 5), 120) }
                     ), in: 5...120, step: 5)
                     .frame(width: 160)
                     
-                    TextField("", value: $restSeconds, formatter: NumberFormatter())
+                    TextField("", value: .init(
+                        get: { restSeconds },
+                        set: { restSeconds = min(max($0, 5), 120) }
+                    ), formatter: NumberFormatter())
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 50)
                         .multilineTextAlignment(.center)
