@@ -391,12 +391,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func bringSettingsWindowToFront(_ window: NSWindow) {
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        NSRunningApplication.current.activate(options: [
+            .activateIgnoringOtherApps,
+            .activateAllWindows
+        ])
         window.makeKeyAndOrderFront(nil)
+        
+        DispatchQueue.main.async {
+            NSRunningApplication.current.activate(options: [
+                .activateIgnoringOtherApps,
+                .activateAllWindows
+            ])
+            window.makeKeyAndOrderFront(nil)
+        }
     }
     
     func showSettingsWindow() {
