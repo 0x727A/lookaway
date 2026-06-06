@@ -8,6 +8,7 @@ enum DefaultsKey {
     static let isForceRestMode = "LookAway.isForceRestMode"
     static let playSoundOnRestEnd = "LookAway.playSoundOnRestEnd"
     static let displayMode = "LookAway.displayMode"
+    static let pauseVideoOnRestStart = "LookAway.pauseVideoOnRestStart"
 }
 
 @main
@@ -69,6 +70,70 @@ final class RestSession: ObservableObject {
     }
 }
 
+final class VideoPauser {
+    private static func isInstalledAndRunning(_ bundleID: String) -> Bool {
+        guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil else {
+            return false
+        }
+        return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+    }
+    
+    static func pauseKnownVideoPlayers() {
+        if isInstalledAndRunning("com.apple.Safari") { pauseSafari() }
+        if isInstalledAndRunning("com.google.Chrome") { pauseChrome() }
+        if isInstalledAndRunning("com.apple.QuickTimePlayerX") { pauseQuickTime() }
+        // Edge: MVP 阶段暂不处理，避免未安装时弹窗
+    }
+    
+    private static func runAppleScript(_ source: String) {
+        guard let script = NSAppleScript(source: source) else { return }
+        var errorInfo: NSDictionary?
+        script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            NSLog("LookAway VideoPauser AppleScript error: \(errorInfo)")
+        }
+    }
+    
+    private static func pauseSafari() {
+        let script = """
+        tell application "Safari"
+            if exists front window then
+                tell front window
+                    tell current tab
+                        do JavaScript "document.querySelectorAll('video').forEach(v => { if(!v.paused && !v.ended) v.pause(); })"
+                    end tell
+                end tell
+            end if
+        end tell
+        """
+        runAppleScript(script)
+    }
+    
+    private static func pauseChrome() {
+        let script = """
+        tell application "Google Chrome"
+            if exists front window then
+                tell front window
+                    tell active tab
+                        execute javascript "document.querySelectorAll('video').forEach(v => { if(!v.paused && !v.ended) v.pause(); })"
+                    end tell
+                end tell
+            end if
+        end tell
+        """
+        runAppleScript(script)
+    }
+    
+    private static func pauseQuickTime() {
+        let script = """
+        tell application "QuickTime Player"
+            pause every document
+        end tell
+        """
+        runAppleScript(script)
+    }
+}
+
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusItem: NSStatusItem!
@@ -85,6 +150,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var restDurationSeconds = 20
     var isForceRestMode = false
     var playSoundOnRestEnd = true
+    var pauseVideoOnRestStart = false
     var launchAtLogin = false
     var displayMode = 0 // 0=图标+时间, 1=仅时间, 2=极简图标
     var dotPulseOn = false
@@ -123,6 +189,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         restDurationSeconds = defaults.object(forKey: DefaultsKey.restDurationSeconds) as? Int ?? 20
         isForceRestMode = defaults.object(forKey: DefaultsKey.isForceRestMode) as? Bool ?? false
         playSoundOnRestEnd = defaults.object(forKey: DefaultsKey.playSoundOnRestEnd) as? Bool ?? true
+        pauseVideoOnRestStart = defaults.object(forKey: DefaultsKey.pauseVideoOnRestStart) as? Bool ?? false
         displayMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
         countdownSeconds = workDurationMinutes * 60
         
@@ -419,7 +486,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         launchAtLogin = isLaunchAtLoginOnOrPending()
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 430),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -435,6 +502,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             restSeconds: restDurationSeconds,
             forceRest: isForceRestMode,
             playSound: playSoundOnRestEnd,
+            pauseVideo: pauseVideoOnRestStart,
             launchAtLogin: launchAtLogin,
             displayMode: displayMode,
             onSave: { [weak self] settings in
@@ -443,6 +511,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 defaults.set(settings.restSeconds, forKey: DefaultsKey.restDurationSeconds)
                 defaults.set(settings.forceRest, forKey: DefaultsKey.isForceRestMode)
                 defaults.set(settings.playSound, forKey: DefaultsKey.playSoundOnRestEnd)
+                defaults.set(settings.pauseVideo, forKey: DefaultsKey.pauseVideoOnRestStart)
                 defaults.set(settings.displayMode, forKey: DefaultsKey.displayMode)
                 
                 let oldWorkDuration = self?.workDurationMinutes
@@ -452,6 +521,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self?.restDurationSeconds = settings.restSeconds
                 self?.isForceRestMode = settings.forceRest
                 self?.playSoundOnRestEnd = settings.playSound
+                self?.pauseVideoOnRestStart = settings.pauseVideo
                 self?.displayMode = settings.displayMode
                 self?.updateMenuState()
                 
@@ -502,6 +572,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         workTimer?.invalidate()
         workTimer = nil
+        
+        if pauseVideoOnRestStart {
+            VideoPauser.pauseKnownVideoPlayers()
+        }
         
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
@@ -625,6 +699,7 @@ struct SettingsValues {
     let restSeconds: Int
     let forceRest: Bool
     let playSound: Bool
+    let pauseVideo: Bool
     let displayMode: Int
 }
 
@@ -633,6 +708,7 @@ struct SettingsView: View {
     @State var restSeconds: Int
     @State var forceRest: Bool
     @State var playSound: Bool
+    @State var pauseVideo: Bool
     @State var launchAtLogin: Bool
     @State var displayMode: Int
     let onSave: (SettingsValues) -> Void
@@ -704,6 +780,10 @@ struct SettingsView: View {
             Toggle("休息结束播放提示音", isOn: $playSound)
                 .font(.system(size: 13))
             
+            // 休息开始时暂停视频
+            Toggle("休息开始时暂停网页视频", isOn: $pauseVideo)
+                .font(.system(size: 13))
+            
             // 登录时启动
             Toggle("登录时启动", isOn: Binding(
                 get: { launchAtLogin },
@@ -744,6 +824,7 @@ struct SettingsView: View {
                         restSeconds: clampedRest,
                         forceRest: forceRest,
                         playSound: playSound,
+                        pauseVideo: pauseVideo,
                         displayMode: displayMode
                     ))
                 }
