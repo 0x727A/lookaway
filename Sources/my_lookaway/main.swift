@@ -11,6 +11,12 @@ enum DefaultsKey {
     static let pauseVideoOnRestStart = "LookAway.pauseVideoOnRestStart"
 }
 
+enum DisplayMode: Int {
+    case iconAndTime = 0
+    case timeOnly = 1
+    case minimalIcon = 2
+}
+
 @main
 struct LookAwayApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -31,6 +37,7 @@ final class RestSession: ObservableObject {
     private let startTime = Date()
     private var timer: Timer?
     private let onComplete: () -> Void
+    private var isCompleted = false
     
     init(duration: Int, onComplete: @escaping () -> Void) {
         let safeDuration = max(1, duration)
@@ -51,6 +58,8 @@ final class RestSession: ObservableObject {
     }
     
     func tick() {
+        guard !isCompleted else { return }
+        
         let elapsed = Date().timeIntervalSince(startTime)
         let remaining = max(0, Double(duration) - elapsed)
         
@@ -58,6 +67,7 @@ final class RestSession: ObservableObject {
         progress = CGFloat(remaining / Double(duration))
         
         if remaining <= 0 {
+            isCompleted = true
             progress = 0
             remainingSeconds = 0
             timer?.invalidate()
@@ -67,6 +77,7 @@ final class RestSession: ObservableObject {
     }
     
     func invalidate() {
+        isCompleted = true
         timer?.invalidate()
         timer = nil
     }
@@ -154,7 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var playSoundOnRestEnd = true
     var pauseVideoOnRestStart = false
     var launchAtLogin = false
-    var displayMode = 0 // 0=图标+时间, 1=仅时间, 2=极简图标
+    var displayMode = DisplayMode.iconAndTime.rawValue // persisted raw value
     var dotPulseOn = false
     var singleClickWorkItem: DispatchWorkItem?
     var pendingShowSettings = false
@@ -162,6 +173,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var isSystemSuspended = false
     var isScreenInactive = false
     var isSessionInactive = false
+
+    var currentDisplayMode: DisplayMode {
+        DisplayMode(rawValue: displayMode) ?? .iconAndTime
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例检查
@@ -258,6 +273,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
     }
     
+    func applicationWillTerminate(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        DistributedNotificationCenter.default().removeObserver(self)
+        
+        workTimer?.invalidate()
+        workTimer = nil
+        
+        restSession?.invalidate()
+        restSession = nil
+    }
+    
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
@@ -296,7 +322,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         
-        if restWindows.isEmpty && displayMode == 2 {
+        if restWindows.isEmpty && currentDisplayMode == .minimalIcon {
             dotPulseOn.toggle()
         }
         
@@ -304,12 +330,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func applyStatusItemLength() {
-        switch displayMode {
-        case 1:
+        switch currentDisplayMode {
+        case .timeOnly:
             statusItem.length = 46
-        case 2:
+        case .minimalIcon:
             statusItem.length = 28
-        default:
+        case .iconAndTime:
             statusItem.length = 58
         }
     }
@@ -346,12 +372,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             iconWeight = .semibold
         }
         
-        switch displayMode {
-        case 1: // 仅时间
+        switch currentDisplayMode {
+        case .timeOnly: // 仅时间
             button.title = timeText
             button.image = nil
             button.imagePosition = .noImage
-        case 2: // 极简图标 + 底部进度点
+        case .minimalIcon: // 极简图标 + 底部进度点
             button.title = ""
             button.imagePosition = .imageOnly
             button.image = renderMinimalImage(
@@ -359,7 +385,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 iconColor: iconColor,
                 iconWeight: iconWeight
             )
-        default: // 0=图标+时间
+        case .iconAndTime: // 图标+时间
             button.title = timeText
             button.imagePosition = .imageLeading
             if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
@@ -380,7 +406,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let isResting = !restWindows.isEmpty
         let workTotalSeconds = workDurationMinutes * 60
         let currentCountdown = countdownSeconds
-        let mode = displayMode
+        let mode = currentDisplayMode
         let paused = isPaused
         let pulseOn = dotPulseOn
         
@@ -393,7 +419,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             activeDots = max(0, min(5, Int(ceil(progress * 5))))
         }
         let pulsingDotIndex = max(0, activeDots - 1)
-        let shouldPulseDots = mode == 2 && !paused && !isResting && activeDots > 0
+        let shouldPulseDots = mode == .minimalIcon && !paused && !isResting && activeDots > 0
         
         let dotSize: CGFloat = 2.8
         let spacing: CGFloat = 1.8
@@ -613,7 +639,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self?.displayMode = settings.displayMode
                 self?.updateMenuState()
                 
-                if settings.displayMode == 2 {
+                if DisplayMode(rawValue: settings.displayMode) == .minimalIcon {
                     self?.dotPulseOn = true
                 }
                 
