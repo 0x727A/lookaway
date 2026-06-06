@@ -16,7 +16,12 @@ PLIST="LookAway.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :NSAppleEventsUsageDescription 'LookAway 会在休息开始时向浏览器或视频播放器发送暂停命令，仅用于暂停正在播放的视频。'" "$PLIST" \
   || /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string 'LookAway 会在休息开始时向浏览器或视频播放器发送暂停命令，仅用于暂停正在播放的视频。'" "$PLIST"
 
+echo "正在写入当前 commit 哈希到 Info.plist..."
+COMMIT_HASH=$(git rev-parse --short HEAD)
+/usr/libexec/PlistBuddy -c "Set :LookAwayCommitHash '$COMMIT_HASH'" "$PLIST" \
+  || /usr/libexec/PlistBuddy -c "Add :LookAwayCommitHash string '$COMMIT_HASH'" "$PLIST"
+
+echo "正在使用 entitlements 签名（用于 Apple Events 自动化）..."
+codesign --force --sign - --entitlements LookAway.entitlements LookAway.app
+
 echo "构建完成: LookAway.app"
-echo ""
-echo "注意：如需使用 entitlements 签名（用于 Apple Events 自动化）："
-echo "  codesign --force --sign - --entitlements LookAway.entitlements LookAway.app"

@@ -170,9 +170,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var singleClickWorkItem: DispatchWorkItem?
     var pendingShowSettings = false
     var quitMenuItem: NSMenuItem?
-    var isSystemSuspended = false
-    var isScreenInactive = false
-    var isSessionInactive = false
+    var isSystemSuspended = false   // LookAway 已因系统/屏幕/会话非活跃暂停倒计时
+    var isSleepInactive = false     // 系统睡眠
+    var isScreenInactive = false    // 屏幕睡眠/黑屏
+    var isSessionInactive = false   // 锁屏/会话非活跃
 
     var currentDisplayMode: DisplayMode {
         DisplayMode(rawValue: displayMode) ?? .iconAndTime
@@ -495,7 +496,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func resumeWorkCountdownIfSystemActive() {
         guard isSystemSuspended else { return }
-        guard !isScreenInactive && !isSessionInactive else { return }
+        guard !isSleepInactive && !isScreenInactive && !isSessionInactive else { return }
 
         isSystemSuspended = false
         guard restWindows.isEmpty else { return }
@@ -512,12 +513,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func systemWillSuspend() {
-        isScreenInactive = true
+        isSleepInactive = true
         suspendWorkCountdownForInactiveSystem()
     }
 
     @objc func systemDidResume() {
-        isScreenInactive = false
+        isSleepInactive = false
         resumeWorkCountdownIfSystemActive()
     }
 
@@ -753,7 +754,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         countdownSeconds = workDurationMinutes * 60
         updateMenuTitle()
         
-        if isSystemSuspended || isScreenInactive || isSessionInactive {
+        if isSystemSuspended || isSleepInactive || isScreenInactive || isSessionInactive {
             isSystemSuspended = true
             workTimer?.invalidate()
             workTimer = nil
@@ -825,6 +826,24 @@ struct SettingsValues {
 }
 
 struct SettingsView: View {
+    private static let workFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.minimum = 1
+        formatter.maximum = 60
+        formatter.allowsFloats = false
+        return formatter
+    }()
+    
+    private static let restFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.minimum = 5
+        formatter.maximum = 120
+        formatter.allowsFloats = false
+        return formatter
+    }()
+    
     @State var workMinutes: Int
     @State var restSeconds: Int
     @State var forceRest: Bool
@@ -856,7 +875,7 @@ struct SettingsView: View {
                     TextField("", value: .init(
                         get: { workMinutes },
                         set: { workMinutes = min(max($0, 1), 60) }
-                    ), formatter: NumberFormatter())
+                    ), formatter: Self.workFormatter)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 50)
                         .multilineTextAlignment(.center)
@@ -882,7 +901,7 @@ struct SettingsView: View {
                     TextField("", value: .init(
                         get: { restSeconds },
                         set: { restSeconds = min(max($0, 5), 120) }
-                    ), formatter: NumberFormatter())
+                    ), formatter: Self.restFormatter)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 50)
                         .multilineTextAlignment(.center)
@@ -953,6 +972,14 @@ struct SettingsView: View {
                 .buttonStyle(.borderedProminent)
             }
             .padding(.top, 8)
+            
+            // 版本信息
+            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知"
+            let commit = Bundle.main.infoDictionary?["LookAwayCommitHash"] as? String ?? "未知"
+            Text("LookAway v\(version) (\(commit))")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .padding(.top, 4)
         }
         .padding(24)
         .frame(width: 320)
