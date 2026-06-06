@@ -720,8 +720,8 @@ struct SettingsView: View {
                 .keyboardShortcut(.cancelAction)
                 
                 Button("保存") {
-                    let clampedWork = max(1, workMinutes)
-                    let clampedRest = max(5, restSeconds)
+                    let clampedWork = min(max(workMinutes, 1), 60)
+                    let clampedRest = min(max(restSeconds, 5), 120)
                     workMinutes = clampedWork
                     restSeconds = clampedRest
                     onSave(SettingsValues(
