@@ -269,64 +269,63 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func renderMinimalImage(symbolName: String, iconColor: NSColor, iconWeight: NSFont.Weight) -> NSImage {
         let w: CGFloat = 28
         let h: CGFloat = 22
-        let image = NSImage(size: NSSize(width: w, height: h))
-        image.lockFocus()
         
-        // 画图标（上方居中）
-        if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 12.5, weight: iconWeight)
-                .applying(.init(hierarchicalColor: iconColor))
-            let tinted = symbol.withSymbolConfiguration(config)
-            let iconSize: CGFloat = 14
-            let iconRect = NSRect(
-                x: (w - iconSize) / 2,
-                y: 7,
-                width: iconSize,
-                height: iconSize
-            )
-            tinted?.draw(in: iconRect)
-        }
-        
-        // 底部 5 个进度点
-        let activeDots: Int
-        if !restWindows.isEmpty {
-            activeDots = 0
-        } else {
-            let total = max(1, workDurationMinutes * 60)
-            let progress = CGFloat(countdownSeconds) / CGFloat(total)
-            activeDots = max(0, min(5, Int(ceil(progress * 5))))
-        }
-        
-        let pulsingDotIndex = max(0, activeDots - 1)
-        let shouldPulseDots = displayMode == 2 && !isPaused && restWindows.isEmpty && activeDots > 0
-        
-        let dotSize: CGFloat = 2.8
-        let spacing: CGFloat = 1.8
-        let totalWidth = dotSize * 5 + spacing * 4
-        let startX = (w - totalWidth) / 2
-        let dotY: CGFloat = 2.5
-        
-        for index in 0..<5 {
-            let isActive = index < activeDots
-            let isPulsing = shouldPulseDots && index == pulsingDotIndex
-            let activeAlpha: CGFloat = isPulsing ? (dotPulseOn ? 1.0 : 0.7) : 0.9
+        return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
+            // 画图标（上方居中）
+            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 12.5, weight: iconWeight)
+                    .applying(.init(hierarchicalColor: iconColor))
+                let tinted = symbol.withSymbolConfiguration(config)
+                let iconSize: CGFloat = 14
+                let iconRect = NSRect(
+                    x: (w - iconSize) / 2,
+                    y: 7,
+                    width: iconSize,
+                    height: iconSize
+                )
+                tinted?.draw(in: iconRect)
+            }
             
-            let color = isActive
-                ? NSColor.white.withAlphaComponent(activeAlpha)
-                : NSColor.white.withAlphaComponent(0.28)
+            // 底部 5 个进度点
+            let activeDots: Int
+            if !self.restWindows.isEmpty {
+                activeDots = 0
+            } else {
+                let total = max(1, self.workDurationMinutes * 60)
+                let progress = CGFloat(self.countdownSeconds) / CGFloat(total)
+                activeDots = max(0, min(5, Int(ceil(progress * 5))))
+            }
             
-            let dotRect = NSRect(
-                x: startX + CGFloat(index) * (dotSize + spacing),
-                y: dotY,
-                width: dotSize,
-                height: dotSize
-            )
-            color.setFill()
-            NSBezierPath(ovalIn: dotRect).fill()
+            let pulsingDotIndex = max(0, activeDots - 1)
+            let shouldPulseDots = self.displayMode == 2 && !self.isPaused && self.restWindows.isEmpty && activeDots > 0
+            
+            let dotSize: CGFloat = 2.8
+            let spacing: CGFloat = 1.8
+            let totalWidth = dotSize * 5 + spacing * 4
+            let startX = (w - totalWidth) / 2
+            let dotY: CGFloat = 2.5
+            
+            for index in 0..<5 {
+                let isActive = index < activeDots
+                let isPulsing = shouldPulseDots && index == pulsingDotIndex
+                let activeAlpha: CGFloat = isPulsing ? (self.dotPulseOn ? 1.0 : 0.7) : 0.9
+                
+                let color = isActive
+                    ? NSColor.white.withAlphaComponent(activeAlpha)
+                    : NSColor.white.withAlphaComponent(0.38)
+                
+                let dotRect = NSRect(
+                    x: startX + CGFloat(index) * (dotSize + spacing),
+                    y: dotY,
+                    width: dotSize,
+                    height: dotSize
+                )
+                color.setFill()
+                NSBezierPath(ovalIn: dotRect).fill()
+            }
+            
+            return true
         }
-        
-        image.unlockFocus()
-        return image
     }
     
     @objc func togglePause() {
