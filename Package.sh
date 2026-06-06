@@ -1,22 +1,22 @@
 #!/bin/bash
 set -e
 
-echo "Building LookAway..."
+echo "正在构建 LookAway..."
 swift build -c release
 
-echo "Copying binary into .app bundle..."
+echo "正在将二进制文件复制到 .app 包..."
 cp .build/release/LookAway LookAway.app/Contents/MacOS/LookAway
 
-echo "Copying icon into .app bundle..."
+echo "正在将图标复制到 .app 包..."
 mkdir -p LookAway.app/Contents/Resources
 cp icon/LookAway.icns LookAway.app/Contents/Resources/
 
-echo "Ensuring NSAppleEventsUsageDescription in Info.plist..."
+echo "正在确保 Info.plist 中包含 NSAppleEventsUsageDescription..."
 PLIST="LookAway.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :NSAppleEventsUsageDescription 'LookAway 会在休息开始时向浏览器或视频播放器发送暂停命令，仅用于暂停正在播放的视频。'" "$PLIST" \
   || /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string 'LookAway 会在休息开始时向浏览器或视频播放器发送暂停命令，仅用于暂停正在播放的视频。'" "$PLIST"
 
-echo "Build complete: LookAway.app"
+echo "构建完成: LookAway.app"
 echo ""
-echo "NOTE: To sign with entitlements (for Apple Events automation):"
+echo "注意：如需使用 entitlements 签名（用于 Apple Events 自动化）："
 echo "  codesign --force --sign - --entitlements LookAway.entitlements LookAway.app"
