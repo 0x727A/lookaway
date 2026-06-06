@@ -167,6 +167,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
     
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if isForceRestMode && !restWindows.isEmpty {
+            return .terminateCancel
+        }
+        return .terminateNow
+    }
+    
     func startWorkTimer() {
         workTimer?.invalidate()
         workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
