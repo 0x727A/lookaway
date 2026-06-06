@@ -37,14 +37,16 @@ final class RestSession: ObservableObject {
         self.duration = safeDuration
         self.remainingSeconds = safeDuration
         self.onComplete = onComplete
-        start()
     }
     
     func start() {
         timer?.invalidate()
         timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
         }
+        // Timer 已注册到 RunLoop.main；使用 assumeIsolated 时必须保持在此主运行循环上，切勿换到其他队列。
         RunLoop.main.add(timer!, forMode: .common)
     }
     
@@ -272,11 +274,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
         
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.tick()
             }
         }
         workTimer = timer
+        // Timer 已注册到 RunLoop.main；使用 assumeIsolated 时必须保持在此主运行循环上，切勿换到其他队列。
         RunLoop.main.add(timer, forMode: .common)
     }
     
@@ -668,14 +671,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         
-        restSession = RestSession(duration: restDurationSeconds) { [weak self] in
+        let session = RestSession(duration: restDurationSeconds) { [weak self] in
             self?.closeRestWindow(playSound: self?.playSoundOnRestEnd ?? true, skipped: false)
         }
-        
-        guard let session = restSession else {
-            startWorkTimer()
-            return
-        }
+        restSession = session
+        session.start()
         
         for screen in screens {
             let frame = screen.frame
