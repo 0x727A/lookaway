@@ -1,11 +1,11 @@
-# Task List
+# 任务清单
 
-- [ ] Split `Sources/my_lookaway/main.swift` into focused Swift files without changing behavior.
-  - Target files: `LookAwayApp.swift`, `Constants.swift`, `RestSession.swift`, `VideoPauser.swift`, `AppDelegate.swift`, `SettingsView.swift`, `RestView.swift`.
-  - Keep the refactor mechanical: no renamed APIs, no UI copy changes, no timer/lock/video behavior changes.
-  - After splitting, run the package script and verify settings, rest windows, lock handling, and video pause behavior.
+- [ ] 将 `Sources/my_lookaway/main.swift` 拆分为多个职责单一的 Swift 文件，保持行为不变。
+  - 目标文件：`LookAwayApp.swift`、`Constants.swift`、`RestSession.swift`、`VideoPauser.swift`、`AppDelegate.swift`、`SettingsView.swift`、`RestView.swift`。
+  - 保持纯机械拆分：不修改 API 名称、不改动 UI 文案、不改动计时器/锁屏/视频暂停行为。
+  - 拆分后运行打包脚本，验证设置窗口、休息窗口、锁屏处理、视频暂停功能均正常。
 
-- [ ] Replace deprecated activation calls and document the settings-window focus workaround.
-  - Current code uses `NSRunningApplication.activate(options:)` to make a menu-bar accessory app's settings window interactive on first click.
-  - Investigate `NSApp.activate()` and `NSRunningApplication.activate(from:options:)` without regressing the previously fixed first-click issue.
-  - Keep or replace the double activation only after verifying settings opens from the menu and the first click inside the window works.
+- [ ] 替换已弃用的窗口激活调用，并记录设置窗口焦点问题的解决方案。
+  - 当前代码使用 `NSRunningApplication.activate(options:)` 让菜单栏附属应用的设置窗口在首次点击时获得交互焦点。
+  - 调研 `NSApp.activate()` 和 `NSRunningApplication.activate(from:options:)`，确保不破坏此前修复的首次点击问题。
+  - 仅在验证设置窗口可从菜单打开且窗口内首次点击有效后，保留或替换双重激活逻辑。
