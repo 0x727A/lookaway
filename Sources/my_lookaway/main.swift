@@ -130,9 +130,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         countdownSeconds = workDurationMinutes * 60
         
         statusItem = NSStatusBar.system.statusItem(withLength: 58)
-        statusItem.button?.title = "LookAway"
-        statusItem.button?.image = nil
         applyStatusItemLength()
+        updateMenuTitle()
         
         // 原生菜单
         let menu = NSMenu()
@@ -223,31 +222,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let iconColor: NSColor
         let iconWeight: NSFont.Weight
         if !restWindows.isEmpty {
-            symbolName = "cup.and.saucer.fill"
-            iconColor = .systemOrange
+            symbolName = "figure.mind.and.body"
+            iconColor = .white
             iconWeight = .regular
         } else if isPaused {
             symbolName = "pause.fill"
             iconColor = .white
             iconWeight = .semibold
         } else if countdownSeconds <= 10 {
-            symbolName = "timer"
+            symbolName = "exclamationmark.triangle.fill"
             iconColor = .white
             iconWeight = .semibold
         } else if countdownSeconds < 60 {
             symbolName = "timer"
             iconColor = .white
-            iconWeight = .bold
+            iconWeight = .semibold
         } else {
-            symbolName = "eye.fill"
-            iconColor = .controlTextColor
-            iconWeight = .regular
+            symbolName = "viewfinder"
+            iconColor = .white
+            iconWeight = .semibold
         }
         
         switch displayMode {
         case 1: // 仅时间
             button.title = timeText
             button.image = nil
+            button.imagePosition = .noImage
         case 2: // 极简图标 + 底部进度点
             button.title = ""
             button.imagePosition = .imageOnly
@@ -277,13 +277,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         // 画图标（上方居中）
         if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 11, weight: iconWeight)
+            let config = NSImage.SymbolConfiguration(pointSize: 12.5, weight: iconWeight)
                 .applying(.init(hierarchicalColor: iconColor))
             let tinted = symbol.withSymbolConfiguration(config)
-            let iconSize: CGFloat = 12
+            let iconSize: CGFloat = 14
             let iconRect = NSRect(
                 x: (w - iconSize) / 2,
-                y: 8,
+                y: 7,
                 width: iconSize,
                 height: iconSize
             )
@@ -303,16 +303,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let pulsingDotIndex = max(0, activeDots - 1)
         let shouldPulseDots = displayMode == 2 && !isPaused && restWindows.isEmpty && activeDots > 0
         
-        let dotSize: CGFloat = 2.2
-        let spacing: CGFloat = 2.0
+        let dotSize: CGFloat = 2.8
+        let spacing: CGFloat = 1.8
         let totalWidth = dotSize * 5 + spacing * 4
         let startX = (w - totalWidth) / 2
-        let dotY: CGFloat = 3
+        let dotY: CGFloat = 2.5
         
         for index in 0..<5 {
             let isActive = index < activeDots
             let isPulsing = shouldPulseDots && index == pulsingDotIndex
-            let activeAlpha: CGFloat = isPulsing ? (dotPulseOn ? 1.0 : 0.55) : 0.9
+            let activeAlpha: CGFloat = isPulsing ? (dotPulseOn ? 1.0 : 0.7) : 0.9
             
             let color = isActive
                 ? NSColor.white.withAlphaComponent(activeAlpha)
@@ -759,43 +759,3 @@ struct RestView: View {
     }
 }
 
-// 当前未使用：由原生 NSMenu 替代
-struct StatusMenuView: View {
-    let todayRestCount: Int
-    let todayRestSeconds: Int
-    let todaySkipCount: Int
-    let onTogglePause: () -> Void
-    let onStartRest: () -> Void
-    let onSettings: () -> Void
-    let onQuit: () -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            let minutes = todayRestSeconds / 60
-            let seconds = todayRestSeconds % 60
-            
-            VStack(alignment: .leading, spacing: 6) {
-                Text("今日休息  \(todayRestCount) 次")
-                Text("累计时间  \(minutes) 分 \(seconds) 秒")
-                Text("跳过次数  \(todaySkipCount) 次")
-            }
-            .font(.system(size: 13))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            
-            Divider()
-            
-            Button("开始/暂停", action: onTogglePause)
-            Button("立即休息", action: onStartRest)
-            Button("设置...", action: onSettings)
-            Divider()
-            Button("退出", action: onQuit)
-        }
-        .buttonStyle(.plain)
-        .padding(.vertical, 6)
-        .frame(width: 260, alignment: .leading)
-        .background(Color(NSColor.windowBackgroundColor))
-        .cornerRadius(8)
-    }
-}
