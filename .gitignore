@@ -1,8 +1,16 @@
+# SwiftPM build artifacts
 .build/
-*.app/
-.DS_Store
-*.dmg
 .swiftpm/
+
+# Packaged app artifacts
+*.app/
+*.dmg
+*.dSYM/
+
+# Xcode user/local state
+DerivedData/
 xcuserdata/
-*.xcodeproj
-*.xcworkspace
+*.xcuserstate
+
+# macOS noise
+.DS_Store
