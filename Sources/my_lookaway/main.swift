@@ -157,6 +157,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var singleClickWorkItem: DispatchWorkItem?
     var pendingShowSettings = false
     var quitMenuItem: NSMenuItem?
+    var isSystemSuspended = false
+    var isScreenInactive = false
+    var isSessionInactive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例检查
@@ -221,11 +224,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         startWorkTimer()
         
-        // 监听系统睡眠/唤醒
-        NSWorkspace.shared.notificationCenter.addObserver(
+        // 监听系统睡眠/唤醒/屏幕/会话
+        let center = NSWorkspace.shared.notificationCenter
+        
+        center.addObserver(self, selector: #selector(systemWillSuspend),
+                           name: NSWorkspace.willSleepNotification, object: nil)
+        center.addObserver(self, selector: #selector(systemDidResume),
+                           name: NSWorkspace.didWakeNotification, object: nil)
+        center.addObserver(self, selector: #selector(screenDidSleep),
+                           name: NSWorkspace.screensDidSleepNotification, object: nil)
+        center.addObserver(self, selector: #selector(screenDidWake),
+                           name: NSWorkspace.screensDidWakeNotification, object: nil)
+        center.addObserver(self, selector: #selector(sessionDidResignActive),
+                           name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+        center.addObserver(self, selector: #selector(sessionDidBecomeActive),
+                           name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+        
+        // Distributed Notification：锁屏/解锁（覆盖 Command+Control+Q）
+        let distributedCenter = DistributedNotificationCenter.default()
+        distributedCenter.addObserver(
             self,
-            selector: #selector(systemDidWake),
-            name: NSWorkspace.didWakeNotification,
+            selector: #selector(screenIsLocked),
+            name: Notification.Name("com.apple.screenIsLocked"),
+            object: nil
+        )
+        distributedCenter.addObserver(
+            self,
+            selector: #selector(screenIsUnlocked),
+            name: Notification.Name("com.apple.screenIsUnlocked"),
             object: nil
         )
     }
@@ -255,7 +281,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func tick() {
-        guard !isPaused else { return }
+        guard !isPaused && !isSystemSuspended else { return }
         guard let endDate = workEndDate else { return }
         
         countdownSeconds = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
@@ -428,17 +454,76 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateMenuTitle()
     }
     
-    @objc func systemDidWake() {
-        guard restWindows.isEmpty else { return }
-        countdownSeconds = workDurationMinutes * 60
-        if isPaused {
-            workEndDate = nil
-        } else {
-            workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
-        }
+    func suspendWorkCountdownForInactiveSystem() {
+        guard !isSystemSuspended else { return }
+
+        isSystemSuspended = true
+        workTimer?.invalidate()
+        workTimer = nil
+        workEndDate = nil
         updateMenuTitle()
     }
-    
+
+    func resumeWorkCountdownIfSystemActive() {
+        guard isSystemSuspended else { return }
+        guard !isScreenInactive && !isSessionInactive else { return }
+
+        isSystemSuspended = false
+        guard restWindows.isEmpty else { return }
+
+        countdownSeconds = workDurationMinutes * 60
+
+        if isPaused {
+            workEndDate = nil
+            updateMenuTitle()
+        } else {
+            startWorkTimer()
+            updateMenuTitle()
+        }
+    }
+
+    @objc func systemWillSuspend() {
+        isScreenInactive = true
+        suspendWorkCountdownForInactiveSystem()
+    }
+
+    @objc func systemDidResume() {
+        isScreenInactive = false
+        resumeWorkCountdownIfSystemActive()
+    }
+
+    @objc func screenDidSleep() {
+        isScreenInactive = true
+        suspendWorkCountdownForInactiveSystem()
+    }
+
+    @objc func screenDidWake() {
+        isScreenInactive = false
+        resumeWorkCountdownIfSystemActive()
+    }
+
+    @objc func sessionDidResignActive() {
+        isSessionInactive = true
+        suspendWorkCountdownForInactiveSystem()
+    }
+
+    @objc func sessionDidBecomeActive() {
+        isSessionInactive = false
+        resumeWorkCountdownIfSystemActive()
+    }
+
+    @objc func screenIsLocked() {
+        NSLog("LookAway lock notification received")
+        isSessionInactive = true
+        suspendWorkCountdownForInactiveSystem()
+    }
+
+    @objc func screenIsUnlocked() {
+        NSLog("LookAway unlock notification received")
+        isSessionInactive = false
+        resumeWorkCountdownIfSystemActive()
+    }
+
     @objc func startRestNow() {
         countdownSeconds = workDurationMinutes * 60
         workEndDate = nil
@@ -638,8 +723,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         restWindows.removeAll()
         updateMenuState()
+        
         countdownSeconds = workDurationMinutes * 60
         updateMenuTitle()
+        
+        if isSystemSuspended || isScreenInactive || isSessionInactive {
+            isSystemSuspended = true
+            workTimer?.invalidate()
+            workTimer = nil
+            workEndDate = nil
+            return
+        }
+        
         if !isPaused {
             startWorkTimer()
         }
