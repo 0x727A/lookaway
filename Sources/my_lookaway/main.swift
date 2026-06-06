@@ -90,7 +90,7 @@ final class VideoPauser {
         var errorInfo: NSDictionary?
         script.executeAndReturnError(&errorInfo)
         if let errorInfo {
-            NSLog("LookAway VideoPauser AppleScript error: \(errorInfo)")
+            NSLog("LookAway 视频暂停器 AppleScript 错误: \(errorInfo)")
         }
     }
     
@@ -513,13 +513,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func screenIsLocked() {
-        NSLog("LookAway lock notification received")
+        NSLog("LookAway 收到锁屏通知")
         isSessionInactive = true
         suspendWorkCountdownForInactiveSystem()
     }
 
     @objc func screenIsUnlocked() {
-        NSLog("LookAway unlock notification received")
+        NSLog("LookAway 收到解锁通知")
         isSessionInactive = false
         resumeWorkCountdownIfSystemActive()
     }
