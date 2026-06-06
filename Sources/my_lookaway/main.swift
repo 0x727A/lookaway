@@ -76,9 +76,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var restWindows: [NSWindow] = []
     var restSession: RestSession?
     var settingsWindow: NSWindow?
-    var todayRestCount = 0
-    var todayRestSeconds = 0
-    var todaySkipCount = 0
     var countdownSeconds = 20 * 60
     var isPaused = false
     var workEndDate: Date?
@@ -521,13 +518,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     func closeRestWindow(playSound: Bool = false, skipped: Bool = false) {
         guard !restWindows.isEmpty else { return }
-        
-        if skipped {
-            todaySkipCount += 1
-        } else {
-            todayRestCount += 1
-            todayRestSeconds += restDurationSeconds
-        }
         
         if playSound {
             NSSound(named: "Glass")?.play()
