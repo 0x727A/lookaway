@@ -270,18 +270,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let w: CGFloat = 28
         let h: CGFloat = 22
         
-        // 进度点数据在闭包外计算，避免闭包强捕获 self
+        // 所有依赖 self 的数据先算成局部常量，避免 drawing handler 捕获 self
+        let isResting = !restWindows.isEmpty
+        let workTotalSeconds = workDurationMinutes * 60
+        let currentCountdown = countdownSeconds
+        let mode = displayMode
+        let paused = isPaused
+        let pulseOn = dotPulseOn
+        
         let activeDots: Int
-        if !restWindows.isEmpty {
+        if isResting {
             activeDots = 0
         } else {
-            let total = max(1, workDurationMinutes * 60)
-            let progress = CGFloat(countdownSeconds) / CGFloat(total)
+            let total = max(1, workTotalSeconds)
+            let progress = CGFloat(currentCountdown) / CGFloat(total)
             activeDots = max(0, min(5, Int(ceil(progress * 5))))
         }
         let pulsingDotIndex = max(0, activeDots - 1)
-        let shouldPulseDots = displayMode == 2 && !isPaused && restWindows.isEmpty && activeDots > 0
-        let pulseOn = dotPulseOn
+        let shouldPulseDots = mode == 2 && !paused && !isResting && activeDots > 0
         
         let dotSize: CGFloat = 2.8
         let spacing: CGFloat = 1.8
