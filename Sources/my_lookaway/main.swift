@@ -198,7 +198,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         
-        if restWindows.isEmpty {
+        if restWindows.isEmpty && displayMode == 2 {
             dotPulseOn.toggle()
         }
         
