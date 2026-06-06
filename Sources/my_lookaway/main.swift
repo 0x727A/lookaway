@@ -417,35 +417,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             playSound: playSoundOnRestEnd,
             launchAtLogin: launchAtLogin,
             displayMode: displayMode,
-            onSave: { [weak self] work, rest, force, play, mode in
-                let safeWork = max(1, work)
-                let safeRest = max(5, rest)
+            onSave: { [weak self] settings in
+                let defaults = UserDefaults.standard
+                defaults.set(settings.workMinutes, forKey: DefaultsKey.workDurationMinutes)
+                defaults.set(settings.restSeconds, forKey: DefaultsKey.restDurationSeconds)
+                defaults.set(settings.forceRest, forKey: DefaultsKey.isForceRestMode)
+                defaults.set(settings.playSound, forKey: DefaultsKey.playSoundOnRestEnd)
+                defaults.set(settings.displayMode, forKey: DefaultsKey.displayMode)
                 
                 let oldWorkDuration = self?.workDurationMinutes
-                let workDurationChanged = oldWorkDuration != safeWork
+                let workDurationChanged = oldWorkDuration != settings.workMinutes
                 
-                let defaults = UserDefaults.standard
-                defaults.set(safeWork, forKey: DefaultsKey.workDurationMinutes)
-                defaults.set(safeRest, forKey: DefaultsKey.restDurationSeconds)
-                defaults.set(force, forKey: DefaultsKey.isForceRestMode)
-                defaults.set(play, forKey: DefaultsKey.playSoundOnRestEnd)
-                defaults.set(mode, forKey: DefaultsKey.displayMode)
-                
-                self?.workDurationMinutes = safeWork
-                self?.restDurationSeconds = safeRest
-                self?.isForceRestMode = force
-                self?.playSoundOnRestEnd = play
-                self?.displayMode = mode
+                self?.workDurationMinutes = settings.workMinutes
+                self?.restDurationSeconds = settings.restSeconds
+                self?.isForceRestMode = settings.forceRest
+                self?.playSoundOnRestEnd = settings.playSound
+                self?.displayMode = settings.displayMode
                 self?.updateMenuState()
                 
-                if mode == 2 {
+                if settings.displayMode == 2 {
                     self?.dotPulseOn = true
                 }
                 
                 if workDurationChanged {
-                    self?.countdownSeconds = safeWork * 60
+                    self?.countdownSeconds = settings.workMinutes * 60
                     if self?.isPaused == false && self?.restWindows.isEmpty == true {
-                        self?.workEndDate = Date().addingTimeInterval(TimeInterval(safeWork * 60))
+                        self?.workEndDate = Date().addingTimeInterval(TimeInterval(settings.workMinutes * 60))
                     } else {
                         self?.workEndDate = nil
                     }
@@ -608,6 +605,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
+struct SettingsValues {
+    let workMinutes: Int
+    let restSeconds: Int
+    let forceRest: Bool
+    let playSound: Bool
+    let displayMode: Int
+}
+
 struct SettingsView: View {
     @State var workMinutes: Int
     @State var restSeconds: Int
@@ -615,7 +620,7 @@ struct SettingsView: View {
     @State var playSound: Bool
     @State var launchAtLogin: Bool
     @State var displayMode: Int
-    let onSave: (Int, Int, Bool, Bool, Int) -> Void
+    let onSave: (SettingsValues) -> Void
     let onCancel: () -> Void
     let onLaunchAtLoginChange: (Bool) -> Bool
     
@@ -719,7 +724,13 @@ struct SettingsView: View {
                     let clampedRest = max(5, restSeconds)
                     workMinutes = clampedWork
                     restSeconds = clampedRest
-                    onSave(clampedWork, clampedRest, forceRest, playSound, displayMode)
+                    onSave(SettingsValues(
+                        workMinutes: clampedWork,
+                        restSeconds: clampedRest,
+                        forceRest: forceRest,
+                        playSound: playSound,
+                        displayMode: displayMode
+                    ))
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
