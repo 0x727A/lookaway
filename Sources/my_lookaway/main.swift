@@ -178,11 +178,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         workTimer?.invalidate()
         workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
         
-        workTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
             }
         }
+        workTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
     
     func tick() {
