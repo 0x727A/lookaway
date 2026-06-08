@@ -113,6 +113,14 @@ final class VideoPauser {
         // Edge: MVP 阶段暂不处理，避免未安装时弹窗
     }
     
+    static func pauseKnownVideoPlayersAsync() {
+        DispatchQueue.global(qos: .utility).async {
+            autoreleasepool {
+                pauseKnownVideoPlayers()
+            }
+        }
+    }
+    
     private static func runAppleScript(_ source: String) {
         guard let script = NSAppleScript(source: source) else { return }
         var errorInfo: NSDictionary?
@@ -725,18 +733,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         workTimer?.invalidate()
         workTimer = nil
         
-        if pauseVideoOnRestStart {
-            VideoPauser.pauseKnownVideoPlayers()
-        }
-        
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
             startWorkTimer()
             return
-        }
-        
-        if playSoundOnRestStart {
-            playAlertSound(named: restStartSoundName)
         }
         
         let session = RestSession(duration: restDurationSeconds) { [weak self] in
@@ -776,6 +776,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         
         updateMenuState()
+        
+        if playSoundOnRestStart {
+            playAlertSound(named: restStartSoundName)
+        }
+        
+        if pauseVideoOnRestStart {
+            VideoPauser.pauseKnownVideoPlayersAsync()
+        }
     }
     
     func closeRestWindow(playSound: Bool = false, skipped: Bool = false) {
