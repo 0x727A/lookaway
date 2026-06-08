@@ -9,7 +9,15 @@ enum DefaultsKey {
     static let playSoundOnRestEnd = "LookAway.playSoundOnRestEnd"
     static let displayMode = "LookAway.displayMode"
     static let pauseVideoOnRestStart = "LookAway.pauseVideoOnRestStart"
+    static let playSoundOnRestStart = "LookAway.playSoundOnRestStart"
+    static let alertSoundName = "LookAway.alertSoundName"
 }
+
+let systemAlertSounds = [
+    "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass",
+    "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi",
+    "Submarine", "Tink"
+]
 
 enum DisplayMode: Int {
     case iconAndTime = 0
@@ -163,6 +171,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var restDurationSeconds = 20
     var isForceRestMode = false
     var playSoundOnRestEnd = true
+    var playSoundOnRestStart = true
+    var alertSoundName = "Glass"
     var pauseVideoOnRestStart = false
     var launchAtLogin = false
     var displayMode = DisplayMode.iconAndTime.rawValue // persisted raw value
@@ -210,6 +220,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         restDurationSeconds = defaults.object(forKey: DefaultsKey.restDurationSeconds) as? Int ?? 20
         isForceRestMode = defaults.object(forKey: DefaultsKey.isForceRestMode) as? Bool ?? false
         playSoundOnRestEnd = defaults.object(forKey: DefaultsKey.playSoundOnRestEnd) as? Bool ?? true
+        playSoundOnRestStart = defaults.object(forKey: DefaultsKey.playSoundOnRestStart) as? Bool ?? true
+        let rawSoundName = defaults.object(forKey: DefaultsKey.alertSoundName) as? String ?? "Glass"
+        alertSoundName = systemAlertSounds.contains(rawSoundName) ? rawSoundName : "Glass"
         pauseVideoOnRestStart = defaults.object(forKey: DefaultsKey.pauseVideoOnRestStart) as? Bool ?? false
         displayMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
         countdownSeconds = workDurationMinutes * 60
@@ -601,7 +614,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         launchAtLogin = isLaunchAtLoginOnOrPending()
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 470),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -616,7 +629,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             workMinutes: workDurationMinutes,
             restSeconds: restDurationSeconds,
             forceRest: isForceRestMode,
-            playSound: playSoundOnRestEnd,
+            playSoundOnRestEnd: playSoundOnRestEnd,
+            playSoundOnRestStart: playSoundOnRestStart,
+            alertSoundName: alertSoundName,
             pauseVideo: pauseVideoOnRestStart,
             launchAtLogin: launchAtLogin,
             displayMode: displayMode,
@@ -625,7 +640,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 defaults.set(settings.workMinutes, forKey: DefaultsKey.workDurationMinutes)
                 defaults.set(settings.restSeconds, forKey: DefaultsKey.restDurationSeconds)
                 defaults.set(settings.forceRest, forKey: DefaultsKey.isForceRestMode)
-                defaults.set(settings.playSound, forKey: DefaultsKey.playSoundOnRestEnd)
+                defaults.set(settings.playSoundOnRestEnd, forKey: DefaultsKey.playSoundOnRestEnd)
+                defaults.set(settings.playSoundOnRestStart, forKey: DefaultsKey.playSoundOnRestStart)
+                defaults.set(settings.alertSoundName, forKey: DefaultsKey.alertSoundName)
                 defaults.set(settings.pauseVideo, forKey: DefaultsKey.pauseVideoOnRestStart)
                 defaults.set(settings.displayMode, forKey: DefaultsKey.displayMode)
                 
@@ -635,7 +652,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self?.workDurationMinutes = settings.workMinutes
                 self?.restDurationSeconds = settings.restSeconds
                 self?.isForceRestMode = settings.forceRest
-                self?.playSoundOnRestEnd = settings.playSound
+                self?.playSoundOnRestEnd = settings.playSoundOnRestEnd
+                self?.playSoundOnRestStart = settings.playSoundOnRestStart
+                self?.alertSoundName = settings.alertSoundName
                 self?.pauseVideoOnRestStart = settings.pauseVideo
                 self?.displayMode = settings.displayMode
                 self?.updateMenuState()
@@ -682,6 +701,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     
+    func playAlertSound() {
+        if NSSound(named: NSSound.Name(alertSoundName))?.play() != true {
+            NSSound(named: "Glass")?.play()
+        }
+    }
+    
     func showRestWindow() {
         guard restWindows.isEmpty else { return }
         
@@ -696,6 +721,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !screens.isEmpty else {
             startWorkTimer()
             return
+        }
+        
+        if playSoundOnRestStart {
+            playAlertSound()
         }
         
         let session = RestSession(duration: restDurationSeconds) { [weak self] in
@@ -741,7 +770,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !restWindows.isEmpty else { return }
         
         if playSound {
-            NSSound(named: "Glass")?.play()
+            playAlertSound()
         }
         restSession?.invalidate()
         restSession = nil
@@ -820,7 +849,9 @@ struct SettingsValues {
     let workMinutes: Int
     let restSeconds: Int
     let forceRest: Bool
-    let playSound: Bool
+    let playSoundOnRestEnd: Bool
+    let playSoundOnRestStart: Bool
+    let alertSoundName: String
     let pauseVideo: Bool
     let displayMode: Int
 }
@@ -847,7 +878,9 @@ struct SettingsView: View {
     @State var workMinutes: Int
     @State var restSeconds: Int
     @State var forceRest: Bool
-    @State var playSound: Bool
+    @State var playSoundOnRestEnd: Bool
+    @State var playSoundOnRestStart: Bool
+    @State var alertSoundName: String
     @State var pauseVideo: Bool
     @State var launchAtLogin: Bool
     @State var displayMode: Int
@@ -916,9 +949,27 @@ struct SettingsView: View {
             Toggle("强制休息模式（无法跳过）", isOn: $forceRest)
                 .font(.system(size: 13))
             
-            // 休息结束提示音
-            Toggle("休息结束播放提示音", isOn: $playSound)
+            // 休息开始提示音
+            Toggle("休息开始播放提示音", isOn: $playSoundOnRestStart)
                 .font(.system(size: 13))
+            
+            // 休息结束提示音
+            Toggle("休息结束播放提示音", isOn: $playSoundOnRestEnd)
+                .font(.system(size: 13))
+            
+            // 提示音选择
+            VStack(alignment: .leading, spacing: 6) {
+                Text("提示音")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                Picker("", selection: $alertSoundName) {
+                    ForEach(systemAlertSounds, id: \.self) { sound in
+                        Text(sound).tag(sound)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 200)
+            }
             
             // 休息开始时暂停视频
             Toggle("休息开始时暂停网页视频", isOn: $pauseVideo)
@@ -959,11 +1010,14 @@ struct SettingsView: View {
                     let clampedRest = min(max(restSeconds, 5), 120)
                     workMinutes = clampedWork
                     restSeconds = clampedRest
+                    let safeSoundName = systemAlertSounds.contains(alertSoundName) ? alertSoundName : "Glass"
                     onSave(SettingsValues(
                         workMinutes: clampedWork,
                         restSeconds: clampedRest,
                         forceRest: forceRest,
-                        playSound: playSound,
+                        playSoundOnRestEnd: playSoundOnRestEnd,
+                        playSoundOnRestStart: playSoundOnRestStart,
+                        alertSoundName: safeSoundName,
                         pauseVideo: pauseVideo,
                         displayMode: displayMode
                     ))
