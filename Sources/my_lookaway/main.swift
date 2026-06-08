@@ -106,13 +106,6 @@ final class VideoPauser {
         return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
     
-    private static func pauseKnownVideoPlayers() {
-        if isInstalledAndRunning("com.apple.Safari") { pauseSafari() }
-        if isInstalledAndRunning("com.google.Chrome") { pauseChrome() }
-        if isInstalledAndRunning("com.apple.QuickTimePlayerX") { pauseQuickTime() }
-        // Edge: MVP 阶段暂不处理，避免未安装时弹窗
-    }
-    
     /// 在主线程判断哪些播放器正在运行，返回目标标识列表（供后台异步暂停用）
     static func runningTargets() -> [String] {
         var targets: [String] = []
