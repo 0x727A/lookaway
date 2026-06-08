@@ -106,7 +106,7 @@ final class VideoPauser {
         return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
     
-    static func pauseKnownVideoPlayers() {
+    private static func pauseKnownVideoPlayers() {
         if isInstalledAndRunning("com.apple.Safari") { pauseSafari() }
         if isInstalledAndRunning("com.google.Chrome") { pauseChrome() }
         if isInstalledAndRunning("com.apple.QuickTimePlayerX") { pauseQuickTime() }
@@ -756,9 +756,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         
-        // 主线程先判断哪些播放器在运行（NSWorkspace / NSRunningApplication 安全）
-        let videoTargets = pauseVideoOnRestStart ? VideoPauser.runningTargets() : []
-        
         let session = RestSession(duration: restDurationSeconds) { [weak self] in
             self?.closeRestWindow(playSound: self?.playSoundOnRestEnd ?? true, skipped: false)
         }
@@ -801,8 +798,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             playAlertSound(named: restStartSoundName)
         }
         
-        if !videoTargets.isEmpty {
-            VideoPauser.pauseTargetsAsync(videoTargets)
+        if pauseVideoOnRestStart {
+            let videoTargets = VideoPauser.runningTargets()
+            if !videoTargets.isEmpty {
+                VideoPauser.pauseTargetsAsync(videoTargets)
+            }
         }
     }
     
