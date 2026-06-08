@@ -21,8 +21,8 @@ let systemAlertSounds = [
     "Submarine", "Tink"
 ]
 
-func safeSound(_ name: String?) -> String {
-    guard let name = name, systemAlertSounds.contains(name) else { return "Glass" }
+func safeSound(_ name: String?, fallback: String = "Glass") -> String {
+    guard let name = name, systemAlertSounds.contains(name) else { return fallback }
     return name
 }
 
@@ -230,8 +230,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         playSoundOnRestEnd = defaults.object(forKey: DefaultsKey.playSoundOnRestEnd) as? Bool ?? true
         playSoundOnRestStart = defaults.object(forKey: DefaultsKey.playSoundOnRestStart) as? Bool ?? true
         let oldSound = defaults.string(forKey: DefaultsKey.alertSoundName)
-        restStartSoundName = safeSound(defaults.string(forKey: DefaultsKey.restStartSoundName) ?? oldSound ?? "Ping")
-        restEndSoundName = safeSound(defaults.string(forKey: DefaultsKey.restEndSoundName) ?? oldSound ?? "Glass")
+        restStartSoundName = safeSound(defaults.string(forKey: DefaultsKey.restStartSoundName) ?? oldSound, fallback: "Ping")
+        restEndSoundName = safeSound(defaults.string(forKey: DefaultsKey.restEndSoundName) ?? oldSound, fallback: "Glass")
         pauseVideoOnRestStart = defaults.object(forKey: DefaultsKey.pauseVideoOnRestStart) as? Bool ?? false
         displayMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
         countdownSeconds = workDurationMinutes * 60
@@ -964,39 +964,31 @@ struct SettingsView: View {
                 .font(.system(size: 13))
             
             // 休息开始提示音
-            Toggle("休息开始播放提示音", isOn: $playSoundOnRestStart)
-                .font(.system(size: 13))
-            
-            // 开始提示音选择
-            VStack(alignment: .leading, spacing: 6) {
-                Text("开始提示音")
+            HStack {
+                Toggle("休息开始播放提示音", isOn: $playSoundOnRestStart)
                     .font(.system(size: 13))
-                    .foregroundColor(.secondary)
                 Picker("", selection: $restStartSoundName) {
                     ForEach(systemAlertSounds, id: \.self) { sound in
                         Text(sound).tag(sound)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 200)
+                .frame(width: 120)
+                .labelsHidden()
             }
             
             // 休息结束提示音
-            Toggle("休息结束播放提示音", isOn: $playSoundOnRestEnd)
-                .font(.system(size: 13))
-            
-            // 结束提示音选择
-            VStack(alignment: .leading, spacing: 6) {
-                Text("结束提示音")
+            HStack {
+                Toggle("休息结束播放提示音", isOn: $playSoundOnRestEnd)
                     .font(.system(size: 13))
-                    .foregroundColor(.secondary)
                 Picker("", selection: $restEndSoundName) {
                     ForEach(systemAlertSounds, id: \.self) { sound in
                         Text(sound).tag(sound)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 200)
+                .frame(width: 120)
+                .labelsHidden()
             }
             
             // 休息开始时暂停视频
@@ -1038,8 +1030,8 @@ struct SettingsView: View {
                     let clampedRest = min(max(restSeconds, 5), 120)
                     workMinutes = clampedWork
                     restSeconds = clampedRest
-                    let safeStartSound = safeSound(restStartSoundName)
-                    let safeEndSound = safeSound(restEndSoundName)
+                    let safeStartSound = safeSound(restStartSoundName, fallback: "Ping")
+                    let safeEndSound = safeSound(restEndSoundName, fallback: "Glass")
                     onSave(SettingsValues(
                         workMinutes: clampedWork,
                         restSeconds: clampedRest,
