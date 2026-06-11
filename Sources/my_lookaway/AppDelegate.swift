@@ -1,19 +1,5 @@
 import SwiftUI
 import AppKit
-import ServiceManagement
-
-
-@main
-struct LookAwayApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
-    }
-}
-
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
