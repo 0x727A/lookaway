@@ -123,14 +123,9 @@ struct SettingsView: View {
             }
 
             // 休息开始时暂停视频
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("休息开始时暂停网页视频", isOn: $pauseVideo)
-                    .font(.system(size: 13))
-
-                Text("需要在浏览器中开启“允许来自 Apple Events 的 JavaScript”。")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
+            Toggle("休息开始时暂停网页视频", isOn: $pauseVideo)
+                .font(.system(size: 13))
+                .help("需要在浏览器中开启“允许来自 Apple Events 的 JavaScript”。")
 
             // 登录时启动
             Toggle("登录时启动", isOn: Binding(

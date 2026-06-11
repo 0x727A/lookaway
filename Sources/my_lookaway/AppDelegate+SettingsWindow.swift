@@ -51,6 +51,7 @@ extension AppDelegate {
         window.level = .floating
         window.center()
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.delegate = self
 
         let hostingView = NSHostingView(rootView: SettingsView(
