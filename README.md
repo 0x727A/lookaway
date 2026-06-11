@@ -14,7 +14,7 @@
 
 ## 安装
 
-1. 从 [Releases](https://github.com/0x727A/lookaway/releases) 下载最新版 `LookAway-1.0.3.dmg`。
+1. 从 [Releases](https://github.com/0x727A/lookaway/releases) 下载最新版 DMG。
 2. 打开 DMG，将 `LookAway.app` 拖到**应用程序**文件夹。
 3. 首次启动请在**系统设置 > 隐私与安全性**中允许打开。
 
