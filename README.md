@@ -11,6 +11,7 @@
 - **多种显示模式**：图标+时间、仅时间、极简图标，随心切换。
 - **声音提醒**：休息结束时播放提示音。
 - **登录时启动**：开机自动运行，不忘记休息。
+- **视频暂停**：休息开始时自动暂停 Safari / Chrome 中的网页视频（需在浏览器中开启"允许来自 Apple Events 的 JavaScript"）。
 
 ## 安装
 
@@ -25,16 +26,16 @@
 - 到点时应用会自动弹出休息窗口。
 - 强制休息模式下，休息结束前 `Command + Q` 与菜单退出均不可用。
 
+### 浏览器视频暂停
+
+若开启"休息开始时暂停网页视频"，需要在浏览器中允许 JavaScript 自动化控制：
+
+- **Safari**：设置 → 高级 → 勾选"在菜单栏中显示'开发'菜单"，然后 开发 → 勾选"允许来自 Apple Events 的 JavaScript"。
+- **Chrome**：无需额外设置，首次使用时在系统弹窗中允许即可。
+
 ## 系统要求
 
 - macOS 13.0 或更高版本
-
-## 开发构建
-
-```bash
-swift build -c release
-cp .build/release/LookAway LookAway.app/Contents/MacOS/LookAway
-```
 
 ## License
 
