@@ -125,7 +125,7 @@ struct SettingsView: View {
             // 休息开始时暂停视频
             Toggle("休息开始时暂停网页视频", isOn: $pauseVideo)
                 .font(.system(size: 13))
-                .help("需要在浏览器中开启“允许来自 Apple Events 的 JavaScript”。")
+                .help("需要在浏览器中开启“允许来自 Apple Events 的 JavaScript”.")
 
             // 登录时启动
             Toggle("登录时启动", isOn: Binding(
