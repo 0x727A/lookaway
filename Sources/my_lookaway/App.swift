@@ -2,40 +2,11 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-enum DefaultsKey {
-    static let workDurationMinutes = "LookAway.workDurationMinutes"
-    static let restDurationSeconds = "LookAway.restDurationSeconds"
-    static let isForceRestMode = "LookAway.isForceRestMode"
-    static let playSoundOnRestEnd = "LookAway.playSoundOnRestEnd"
-    static let displayMode = "LookAway.displayMode"
-    static let pauseVideoOnRestStart = "LookAway.pauseVideoOnRestStart"
-    static let playSoundOnRestStart = "LookAway.playSoundOnRestStart"
-    static let alertSoundName = "LookAway.alertSoundName"
-    static let restStartSoundName = "LookAway.restStartSoundName"
-    static let restEndSoundName = "LookAway.restEndSoundName"
-}
-
-let systemAlertSounds = [
-    "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass",
-    "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi",
-    "Submarine", "Tink"
-]
-
-func safeSound(_ name: String?, fallback: String = "Glass") -> String {
-    guard let name = name, systemAlertSounds.contains(name) else { return fallback }
-    return name
-}
-
-enum DisplayMode: Int {
-    case iconAndTime = 0
-    case timeOnly = 1
-    case minimalIcon = 2
-}
 
 @main
 struct LookAwayApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
+
     var body: some Scene {
         Settings {
             EmptyView()
@@ -43,142 +14,6 @@ struct LookAwayApp: App {
     }
 }
 
-@MainActor
-final class RestSession: ObservableObject {
-    @Published var remainingSeconds: Int
-    @Published var progress: CGFloat = 1
-    
-    private let duration: Int
-    private let startTime = Date()
-    private var timer: Timer?
-    private let onComplete: () -> Void
-    private var isCompleted = false
-    
-    init(duration: Int, onComplete: @escaping () -> Void) {
-        let safeDuration = max(1, duration)
-        self.duration = safeDuration
-        self.remainingSeconds = safeDuration
-        self.onComplete = onComplete
-    }
-    
-    func start() {
-        timer?.invalidate()
-        timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.tick()
-            }
-        }
-        // Timer 已注册到 RunLoop.main；使用 assumeIsolated 时必须保持在此主运行循环上，切勿换到其他队列。
-        RunLoop.main.add(timer!, forMode: .common)
-    }
-    
-    func tick() {
-        guard !isCompleted else { return }
-        
-        let elapsed = Date().timeIntervalSince(startTime)
-        let remaining = max(0, Double(duration) - elapsed)
-        
-        remainingSeconds = Int(ceil(remaining))
-        progress = CGFloat(remaining / Double(duration))
-        
-        if remaining <= 0 {
-            isCompleted = true
-            progress = 0
-            remainingSeconds = 0
-            timer?.invalidate()
-            timer = nil
-            onComplete()
-        }
-    }
-    
-    func invalidate() {
-        isCompleted = true
-        timer?.invalidate()
-        timer = nil
-    }
-}
-
-final class VideoPauser {
-    private static func isInstalledAndRunning(_ bundleID: String) -> Bool {
-        guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil else {
-            return false
-        }
-        return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
-    }
-    
-    /// 在主线程判断哪些播放器正在运行，返回目标标识列表（供后台异步暂停用）
-    static func runningTargets() -> [String] {
-        var targets: [String] = []
-        if isInstalledAndRunning("com.apple.Safari") { targets.append("safari") }
-        if isInstalledAndRunning("com.google.Chrome") { targets.append("chrome") }
-        if isInstalledAndRunning("com.apple.QuickTimePlayerX") { targets.append("quicktime") }
-        return targets
-    }
-    
-    /// 在后台异步执行指定目标的 AppleScript 暂停（NSWorkspace 查询已在主线程完成）
-    static func pauseTargetsAsync(_ targets: [String]) {
-        DispatchQueue.global(qos: .utility).async {
-            autoreleasepool {
-                for target in targets {
-                    switch target {
-                    case "safari": pauseSafari()
-                    case "chrome": pauseChrome()
-                    case "quicktime": pauseQuickTime()
-                    default: break
-                    }
-                }
-            }
-        }
-    }
-    
-    private static func runAppleScript(_ source: String) {
-        guard let script = NSAppleScript(source: source) else { return }
-        var errorInfo: NSDictionary?
-        script.executeAndReturnError(&errorInfo)
-        if let errorInfo {
-            NSLog("LookAway 视频暂停器 AppleScript 错误: \(errorInfo)")
-        }
-    }
-    
-    private static func pauseSafari() {
-        let script = """
-        tell application "Safari"
-            if exists front window then
-                tell front window
-                    tell current tab
-                        do JavaScript "document.querySelectorAll('video').forEach(v => { if(!v.paused && !v.ended) v.pause(); })"
-                    end tell
-                end tell
-            end if
-        end tell
-        """
-        runAppleScript(script)
-    }
-    
-    private static func pauseChrome() {
-        let script = """
-        tell application "Google Chrome"
-            if exists front window then
-                tell front window
-                    tell active tab
-                        execute javascript "document.querySelectorAll('video').forEach(v => { if(!v.paused && !v.ended) v.pause(); })"
-                    end tell
-                end tell
-            end if
-        end tell
-        """
-        runAppleScript(script)
-    }
-    
-    private static func pauseQuickTime() {
-        let script = """
-        tell application "QuickTime Player"
-            pause every document
-        end tell
-        """
-        runAppleScript(script)
-    }
-}
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -190,7 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var countdownSeconds = 20 * 60
     var isPaused = false
     var workEndDate: Date?
-    
+
     // 可配置的时间
     var workDurationMinutes = 20
     var restDurationSeconds = 20
@@ -226,7 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NSApp.terminate(nil)
             return
         }
-        
+
         // 进程名兜底：防止旧包 bundle id 不同也能同时运行
         let runningLookAwayApps = NSWorkspace.shared.runningApplications.filter {
             $0.processIdentifier != currentPID &&
@@ -237,9 +72,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NSApp.terminate(nil)
             return
         }
-        
+
         NSApp.setActivationPolicy(.accessory)
-        
+
         // 加载持久化设置
         let defaults = UserDefaults.standard
         workDurationMinutes = defaults.object(forKey: DefaultsKey.workDurationMinutes) as? Int ?? 20
@@ -253,11 +88,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         pauseVideoOnRestStart = defaults.object(forKey: DefaultsKey.pauseVideoOnRestStart) as? Bool ?? false
         displayMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
         countdownSeconds = workDurationMinutes * 60
-        
+
         statusItem = NSStatusBar.system.statusItem(withLength: 58)
         applyStatusItemLength()
         updateMenuTitle()
-        
+
         // 原生菜单
         let menu = NSMenu()
         let pauseItem = NSMenuItem(title: "开始/暂停", action: nil, keyEquivalent: "")
@@ -279,12 +114,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         quitMenuItem = quitItem
         statusItem.menu = menu
         updateMenuState()
-        
+
         startWorkTimer()
-        
+
         // 监听系统睡眠/唤醒/屏幕/会话
         let center = NSWorkspace.shared.notificationCenter
-        
+
         center.addObserver(self, selector: #selector(systemWillSuspend),
                            name: NSWorkspace.willSleepNotification, object: nil)
         center.addObserver(self, selector: #selector(systemDidResume),
@@ -297,7 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                            name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
         center.addObserver(self, selector: #selector(sessionDidBecomeActive),
                            name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
-        
+
         // Distributed Notification：锁屏/解锁（覆盖 Command+Control+Q）
         let distributedCenter = DistributedNotificationCenter.default()
         distributedCenter.addObserver(
@@ -313,33 +148,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             object: nil
         )
     }
-    
+
     func applicationWillTerminate(_ notification: Notification) {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
-        
+
         workTimer?.invalidate()
         workTimer = nil
-        
+
         restSession?.invalidate()
         restSession = nil
     }
-    
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
-    
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isForceRestMode && !restWindows.isEmpty {
             return .terminateCancel
         }
         return .terminateNow
     }
-    
+
     func startWorkTimer() {
         workTimer?.invalidate()
         workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
-        
+
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.tick()
@@ -349,27 +184,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Timer 已注册到 RunLoop.main；使用 assumeIsolated 时必须保持在此主运行循环上，切勿换到其他队列。
         RunLoop.main.add(timer, forMode: .common)
     }
-    
+
     func tick() {
         guard !isPaused && !isSystemSuspended else { return }
         guard let endDate = workEndDate else { return }
-        
+
         countdownSeconds = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
-        
+
         if countdownSeconds <= 0 {
             countdownSeconds = workDurationMinutes * 60
             workEndDate = nil
             showRestWindow()
             return
         }
-        
+
         if restWindows.isEmpty && currentDisplayMode == .minimalIcon {
             dotPulseOn.toggle()
         }
-        
+
         updateMenuTitle()
     }
-    
+
     func applyStatusItemLength() {
         switch currentDisplayMode {
         case .timeOnly:
@@ -380,14 +215,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             statusItem.length = 58
         }
     }
-    
+
     func updateMenuTitle() {
         guard let button = statusItem.button else { return }
-        
+
         let minutes = countdownSeconds / 60
         let seconds = countdownSeconds % 60
         let timeText = String(format: "%d:%02d", minutes, seconds)
-        
+
         let symbolName: String
         let iconColor: NSColor
         let iconWeight: NSFont.Weight
@@ -412,7 +247,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             iconColor = .white
             iconWeight = .semibold
         }
-        
+
         switch currentDisplayMode {
         case .timeOnly: // 仅时间
             button.title = timeText
@@ -438,11 +273,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
     }
-    
+
     func renderMinimalImage(symbolName: String, iconColor: NSColor, iconWeight: NSFont.Weight) -> NSImage {
         let w: CGFloat = 28
         let h: CGFloat = 22
-        
+
         // 所有依赖 self 的数据先算成局部常量，避免 drawing handler 捕获 self
         let isResting = !restWindows.isEmpty
         let workTotalSeconds = workDurationMinutes * 60
@@ -450,7 +285,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let mode = currentDisplayMode
         let paused = isPaused
         let pulseOn = dotPulseOn
-        
+
         let activeDots: Int
         if isResting {
             activeDots = 0
@@ -461,13 +296,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let pulsingDotIndex = max(0, activeDots - 1)
         let shouldPulseDots = mode == .minimalIcon && !paused && !isResting && activeDots > 0
-        
+
         let dotSize: CGFloat = 2.8
         let spacing: CGFloat = 1.8
         let totalWidth = dotSize * 5 + spacing * 4
         let startX = (w - totalWidth) / 2
         let dotY: CGFloat = 2.5
-        
+
         return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
             // 画图标（上方居中）
             if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
@@ -483,17 +318,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 )
                 tinted?.draw(in: iconRect)
             }
-            
+
             // 底部 5 个进度点
             for index in 0..<5 {
                 let isActive = index < activeDots
                 let isPulsing = shouldPulseDots && index == pulsingDotIndex
                 let activeAlpha: CGFloat = isPulsing ? (pulseOn ? 1.0 : 0.7) : 0.9
-                
+
                 let color = isActive
                     ? NSColor.white.withAlphaComponent(activeAlpha)
                     : NSColor.white.withAlphaComponent(0.38)
-                
+
                 let dotRect = NSRect(
                     x: startX + CGFloat(index) * (dotSize + spacing),
                     y: dotY,
@@ -503,11 +338,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 color.setFill()
                 NSBezierPath(ovalIn: dotRect).fill()
             }
-            
+
             return true
         }
     }
-    
+
     @objc func togglePause() {
         if isPaused {
             isPaused = false
@@ -523,7 +358,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         updateMenuTitle()
     }
-    
+
     func suspendWorkCountdownForInactiveSystem() {
         guard !isSystemSuspended else { return }
 
@@ -600,27 +435,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showRestWindow()
         updateMenuTitle()
     }
-    
+
     @objc func showSettings() {
         singleClickWorkItem?.cancel()
         singleClickWorkItem = nil
-        
+
         guard !pendingShowSettings else { return }
         pendingShowSettings = true
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.pendingShowSettings = false
             self?.showSettingsWindow()
         }
     }
-    
+
     func bringSettingsWindowToFront(_ window: NSWindow) {
         NSRunningApplication.current.activate(options: [
             .activateIgnoringOtherApps,
             .activateAllWindows
         ])
         window.makeKeyAndOrderFront(nil)
-        
+
         DispatchQueue.main.async {
             NSRunningApplication.current.activate(options: [
                 .activateIgnoringOtherApps,
@@ -629,7 +464,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.makeKeyAndOrderFront(nil)
         }
     }
-    
+
     func showSettingsWindow() {
         guard settingsWindow == nil else {
             if let window = settingsWindow {
@@ -637,9 +472,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             return
         }
-        
+
         launchAtLogin = isLaunchAtLoginOnOrPending()
-        
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 360, height: 510),
             styleMask: [.titled, .closable],
@@ -651,7 +486,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.delegate = self
-        
+
         let hostingView = NSHostingView(rootView: SettingsView(
             workMinutes: workDurationMinutes,
             restSeconds: restDurationSeconds,
@@ -674,10 +509,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 defaults.set(settings.restEndSoundName, forKey: DefaultsKey.restEndSoundName)
                 defaults.set(settings.pauseVideo, forKey: DefaultsKey.pauseVideoOnRestStart)
                 defaults.set(settings.displayMode, forKey: DefaultsKey.displayMode)
-                
+
                 let oldWorkDuration = self?.workDurationMinutes
                 let workDurationChanged = oldWorkDuration != settings.workMinutes
-                
+
                 self?.workDurationMinutes = settings.workMinutes
                 self?.restDurationSeconds = settings.restSeconds
                 self?.isForceRestMode = settings.forceRest
@@ -688,11 +523,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self?.pauseVideoOnRestStart = settings.pauseVideo
                 self?.displayMode = settings.displayMode
                 self?.updateMenuState()
-                
+
                 if DisplayMode(rawValue: settings.displayMode) == .minimalIcon {
                     self?.dotPulseOn = true
                 }
-                
+
                 if workDurationChanged {
                     self?.countdownSeconds = settings.workMinutes * 60
                     if self?.isPaused == false && self?.restWindows.isEmpty == true {
@@ -701,7 +536,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         self?.workEndDate = nil
                     }
                 }
-                
+
                 self?.applyStatusItemLength()
                 self?.updateMenuTitle()
                 self?.settingsWindow?.close()
@@ -714,50 +549,50 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         ))
         window.contentView = hostingView
-        
+
         settingsWindow = window
         bringSettingsWindowToFront(window)
     }
-    
+
     func windowWillClose(_ notification: Notification) {
         guard notification.object as? NSWindow === settingsWindow else { return }
-        
+
         let window = settingsWindow
         window?.delegate = nil
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             window?.contentView = nil
             self?.settingsWindow = nil
         }
     }
-    
+
     func playAlertSound(named soundName: String) {
         if NSSound(named: NSSound.Name(soundName))?.play() != true {
             NSSound(named: "Glass")?.play()
         }
     }
-    
+
     func showRestWindow() {
         guard restWindows.isEmpty else { return }
-        
+
         workTimer?.invalidate()
         workTimer = nil
-        
+
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
             startWorkTimer()
             return
         }
-        
+
         let session = RestSession(duration: restDurationSeconds) { [weak self] in
             self?.closeRestWindow(playSound: self?.playSoundOnRestEnd ?? true, skipped: false)
         }
         restSession = session
         session.start()
-        
+
         for screen in screens {
             let frame = screen.frame
-            
+
             let window = NSWindow(
                 contentRect: frame,
                 styleMask: [.borderless],
@@ -769,7 +604,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.isOpaque = false
             window.ignoresMouseEvents = false // 始终拦截底层点击，跳过按钮由 RestView 控制
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            
+
             let hostingView = NSHostingView(rootView: RestView(
                 session: session,
                 isForceMode: isForceRestMode,
@@ -781,16 +616,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hostingView.autoresizingMask = [.width, .height]
             window.contentView = hostingView
             window.makeKeyAndOrderFront(nil)
-            
+
             restWindows.append(window)
         }
-        
+
         updateMenuState()
-        
+
         if playSoundOnRestStart {
             playAlertSound(named: restStartSoundName)
         }
-        
+
         if pauseVideoOnRestStart {
             let videoTargets = VideoPauser.runningTargets()
             if !videoTargets.isEmpty {
@@ -798,10 +633,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
     }
-    
+
     func closeRestWindow(playSound: Bool = false, skipped: Bool = false) {
         guard !restWindows.isEmpty else { return }
-        
+
         if playSound {
             playAlertSound(named: restEndSoundName)
         }
@@ -812,10 +647,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         restWindows.removeAll()
         updateMenuState()
-        
+
         countdownSeconds = workDurationMinutes * 60
         updateMenuTitle()
-        
+
         if isSystemSuspended || isSleepInactive || isScreenInactive || isSessionInactive {
             isSystemSuspended = true
             workTimer?.invalidate()
@@ -823,17 +658,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             workEndDate = nil
             return
         }
-        
+
         if !isPaused {
             startWorkTimer()
         }
     }
-    
+
     func isLaunchAtLoginOnOrPending() -> Bool {
         let status = SMAppService.mainApp.status
         return status == .enabled || status == .requiresApproval
     }
-    
+
     func setLaunchAtLogin(_ enabled: Bool) -> Bool {
         do {
             if enabled {
@@ -844,7 +679,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } catch {
             showLaunchAtLoginError(error)
         }
-        
+
         let status = SMAppService.mainApp.status
         if enabled && status == .requiresApproval {
             let alert = NSAlert()
@@ -853,11 +688,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             alert.alertStyle = .informational
             alert.runModal()
         }
-        
+
         launchAtLogin = isLaunchAtLoginOnOrPending()
         return launchAtLogin
     }
-    
+
     func showLaunchAtLoginError(_ error: Error) {
         let alert = NSAlert()
         alert.messageText = "无法设置登录时启动"
@@ -865,276 +700,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alert.alertStyle = .warning
         alert.runModal()
     }
-    
+
 
     func updateMenuState() {
         let isForceResting = isForceRestMode && !restWindows.isEmpty
         quitMenuItem?.isEnabled = !isForceResting
     }
-    
+
     @objc func quit() {
         guard !(isForceRestMode && !restWindows.isEmpty) else { return }
         NSApplication.shared.terminate(nil)
     }
 }
-
-struct SettingsValues {
-    let workMinutes: Int
-    let restSeconds: Int
-    let forceRest: Bool
-    let playSoundOnRestEnd: Bool
-    let playSoundOnRestStart: Bool
-    let restStartSoundName: String
-    let restEndSoundName: String
-    let pauseVideo: Bool
-    let displayMode: Int
-}
-
-struct SettingsView: View {
-    private static let workFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .none
-        formatter.minimum = 1
-        formatter.maximum = 60
-        formatter.allowsFloats = false
-        return formatter
-    }()
-    
-    private static let restFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .none
-        formatter.minimum = 5
-        formatter.maximum = 120
-        formatter.allowsFloats = false
-        return formatter
-    }()
-    
-    @State var workMinutes: Int
-    @State var restSeconds: Int
-    @State var forceRest: Bool
-    @State var playSoundOnRestEnd: Bool
-    @State var playSoundOnRestStart: Bool
-    @State var restStartSoundName: String
-    @State var restEndSoundName: String
-    @State var pauseVideo: Bool
-    @State var launchAtLogin: Bool
-    @State var displayMode: Int
-    let onSave: (SettingsValues) -> Void
-    let onCancel: () -> Void
-    let onLaunchAtLoginChange: (Bool) -> Bool
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("⚙️ 设置")
-                .font(.system(size: 20, weight: .bold))
-            
-            // 工作时间
-            VStack(alignment: .leading, spacing: 6) {
-                Text("工作时间")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                HStack {
-                    Slider(value: .init(
-                        get: { Double(workMinutes) },
-                        set: { workMinutes = min(max(Int($0), 1), 60) }
-                    ), in: 1...60, step: 1)
-                    .frame(width: 160)
-                    
-                    TextField("", value: .init(
-                        get: { workMinutes },
-                        set: { workMinutes = min(max($0, 1), 60) }
-                    ), formatter: Self.workFormatter)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 50)
-                        .multilineTextAlignment(.center)
-                    
-                    Text("分钟")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // 休息时间
-            VStack(alignment: .leading, spacing: 6) {
-                Text("休息时间")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                HStack {
-                    Slider(value: .init(
-                        get: { Double(restSeconds) },
-                        set: { restSeconds = min(max(Int($0), 5), 120) }
-                    ), in: 5...120, step: 5)
-                    .frame(width: 160)
-                    
-                    TextField("", value: .init(
-                        get: { restSeconds },
-                        set: { restSeconds = min(max($0, 5), 120) }
-                    ), formatter: Self.restFormatter)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 50)
-                        .multilineTextAlignment(.center)
-                    
-                    Text("秒")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // 强制休息模式
-            Toggle("强制休息模式（无法跳过）", isOn: $forceRest)
-                .font(.system(size: 13))
-            
-            // 休息开始提示音
-            HStack {
-                Toggle("休息开始播放提示音", isOn: $playSoundOnRestStart)
-                    .font(.system(size: 13))
-                Picker("", selection: $restStartSoundName) {
-                    ForEach(systemAlertSounds, id: \.self) { sound in
-                        Text(sound).tag(sound)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 120)
-                .labelsHidden()
-            }
-            
-            // 休息结束提示音
-            HStack {
-                Toggle("休息结束播放提示音", isOn: $playSoundOnRestEnd)
-                    .font(.system(size: 13))
-                Picker("", selection: $restEndSoundName) {
-                    ForEach(systemAlertSounds, id: \.self) { sound in
-                        Text(sound).tag(sound)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 120)
-                .labelsHidden()
-            }
-            
-            // 休息开始时暂停视频
-            Toggle("休息开始时暂停网页视频", isOn: $pauseVideo)
-                .font(.system(size: 13))
-            
-            // 登录时启动
-            Toggle("登录时启动", isOn: Binding(
-                get: { launchAtLogin },
-                set: { newValue in
-                    let actualValue = onLaunchAtLoginChange(newValue)
-                    launchAtLogin = actualValue
-                }
-            ))
-            .font(.system(size: 13))
-            
-            // 显示模式
-            VStack(alignment: .leading, spacing: 6) {
-                Text("菜单栏显示")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                Picker("", selection: $displayMode) {
-                    Text("图标+时间").tag(0)
-                    Text("仅时间").tag(1)
-                    Text("极简图标").tag(2)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 260)
-            }
-            
-            HStack(spacing: 12) {
-                Button("取消") {
-                    onCancel()
-                }
-                .keyboardShortcut(.cancelAction)
-                
-                Button("保存") {
-                    let clampedWork = min(max(workMinutes, 1), 60)
-                    let clampedRest = min(max(restSeconds, 5), 120)
-                    workMinutes = clampedWork
-                    restSeconds = clampedRest
-                    let safeStartSound = safeSound(restStartSoundName, fallback: "Ping")
-                    let safeEndSound = safeSound(restEndSoundName, fallback: "Glass")
-                    onSave(SettingsValues(
-                        workMinutes: clampedWork,
-                        restSeconds: clampedRest,
-                        forceRest: forceRest,
-                        playSoundOnRestEnd: playSoundOnRestEnd,
-                        playSoundOnRestStart: playSoundOnRestStart,
-                        restStartSoundName: safeStartSound,
-                        restEndSoundName: safeEndSound,
-                        pauseVideo: pauseVideo,
-                        displayMode: displayMode
-                    ))
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(.top, 8)
-            
-            // 版本信息
-            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知"
-            let commit = Bundle.main.infoDictionary?["LookAwayCommitHash"] as? String ?? "未知"
-            Text("LookAway v\(version) (\(commit))")
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
-                .padding(.top, 4)
-        }
-        .padding(24)
-        .frame(width: 320)
-    }
-}
-
-struct RestView: View {
-    @ObservedObject var session: RestSession
-    let isForceMode: Bool
-    let onSkip: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 30) {
-            Text("👀 休息一下")
-                .font(.system(size: 48, weight: .bold))
-                .foregroundColor(.white)
-            
-            Text("眺望 20 米外的远方，放松眼睛")
-                .font(.system(size: 24))
-                .foregroundColor(.white.opacity(0.8))
-            
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 8)
-                    .frame(width: 120, height: 120)
-                
-                Circle()
-                    .trim(from: 0, to: session.progress)
-                    .stroke(Color.green, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .frame(width: 120, height: 120)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.1), value: session.progress)
-                
-                Text("\(session.remainingSeconds)")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(.white)
-            }
-            
-            // 强制模式下不显示跳过按钮
-            if !isForceMode {
-                Button("跳过休息") {
-                    onSkip()
-                }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.15))
-                .cornerRadius(8)
-                .foregroundColor(.white)
-            } else {
-                Text("强制休息中，无法跳过")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.5))
-                    .padding(.top, 8)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.01))
-    }
-}
-
