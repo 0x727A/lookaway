@@ -134,11 +134,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             name: Notification.Name("com.apple.screenIsUnlocked"),
             object: nil
         )
+
+        // 监听屏幕分辨率/插拔状态变更
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
 
         workTimer?.invalidate()
         workTimer = nil

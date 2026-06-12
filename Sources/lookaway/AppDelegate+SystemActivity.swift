@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import SwiftUI
 
 extension AppDelegate {
     func suspendWorkCountdownForInactiveSystem() {
@@ -82,5 +84,49 @@ extension AppDelegate {
         NSLog("LookAway 收到解锁通知")
         isSessionInactive = false
         resumeWorkCountdownIfSystemActive()
+    }
+
+    @objc func screenParametersChanged() {
+        guard !restWindows.isEmpty, let session = restSession else { return }
+
+        // 关闭并释放原先的所有窗口
+        for window in restWindows {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        restWindows.removeAll()
+
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+
+        for screen in screens {
+            let frame = screen.frame
+
+            let window = NSWindow(
+                contentRect: frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .screenSaver
+            window.backgroundColor = isForceRestMode ? .black : NSColor.black.withAlphaComponent(0.85)
+            window.isOpaque = false
+            window.ignoresMouseEvents = false
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let hostingView = NSHostingView(rootView: RestView(
+                session: session,
+                isForceMode: isForceRestMode,
+                onSkip: { [weak self] in
+                    self?.closeRestWindow(playSound: false, skipped: true)
+                }
+            ))
+            hostingView.frame = NSRect(origin: .zero, size: frame.size)
+            hostingView.autoresizingMask = [.width, .height]
+            window.contentView = hostingView
+            window.makeKeyAndOrderFront(nil)
+
+            restWindows.append(window)
+        }
     }
 }
