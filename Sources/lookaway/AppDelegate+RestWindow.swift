@@ -87,6 +87,7 @@ extension AppDelegate {
         restSession = nil
         for window in restWindows {
             window.orderOut(nil)
+            window.contentView = nil
         }
         restWindows.removeAll()
         updateMenuState()
