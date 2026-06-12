@@ -22,6 +22,7 @@ echo "正在确保 Info.plist 中包含 CFBundleIconFile..."
 
 echo "正在从 git tag 获取版本号..."
 VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "1.1.0")
+VERSION=${VERSION#v}
 echo "正在确保 Info.plist 中包含版本号 ${VERSION}..."
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString '$VERSION'" "$PLIST" \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string '$VERSION'" "$PLIST"
