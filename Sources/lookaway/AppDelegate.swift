@@ -24,7 +24,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var launchAtLogin = false
     var displayMode: DisplayMode = .iconAndTime
     var dotPulseOn = false
-    var singleClickWorkItem: DispatchWorkItem?
     var pendingShowSettings = false
     var quitMenuItem: NSMenuItem?
     var isSystemSuspended = false   // LookAway 已因系统/屏幕/会话非活跃暂停倒计时

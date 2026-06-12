@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     private static let workFormatter: NumberFormatter = {
@@ -106,6 +107,9 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .frame(width: 120)
                 .labelsHidden()
+                .onChange(of: restStartSoundName) { newValue in
+                    NSSound(named: NSSound.Name(newValue))?.play()
+                }
             }
 
             // 休息结束提示音
@@ -120,6 +124,9 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .frame(width: 120)
                 .labelsHidden()
+                .onChange(of: restEndSoundName) { newValue in
+                    NSSound(named: NSSound.Name(newValue))?.play()
+                }
             }
 
             // 休息开始时暂停视频

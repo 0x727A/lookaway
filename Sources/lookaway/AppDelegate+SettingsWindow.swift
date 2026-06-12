@@ -3,9 +3,6 @@ import SwiftUI
 
 extension AppDelegate {
     @objc func showSettings() {
-        singleClickWorkItem?.cancel()
-        singleClickWorkItem = nil
-
         guard !pendingShowSettings else { return }
         pendingShowSettings = true
 
@@ -15,6 +12,9 @@ extension AppDelegate {
         }
     }
 
+    /// 将设置窗口激活并带到最前面
+    /// macOS 从状态栏 Extra 菜单打开普通窗口时，首帧同步 activate 可能会被系统的焦点防夺取机制忽略。
+    /// 在下一帧（DispatchQueue.main.async）再次触发激活，确保窗口稳定呈现在最前面并获取输入焦点。
     func bringSettingsWindowToFront(_ window: NSWindow) {
         NSRunningApplication.current.activate(options: [
             .activateIgnoringOtherApps,

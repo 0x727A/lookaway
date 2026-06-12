@@ -20,9 +20,11 @@ echo "正在确保 Info.plist 中包含 CFBundleIconFile..."
 /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile 'LookAway'" "$PLIST" \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string 'LookAway'" "$PLIST"
 
-echo "正在确保 Info.plist 中包含版本号..."
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString '1.1.0'" "$PLIST" \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string '1.1.0'" "$PLIST"
+echo "正在从 git tag 获取版本号..."
+VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "1.1.0")
+echo "正在确保 Info.plist 中包含版本号 ${VERSION}..."
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString '$VERSION'" "$PLIST" \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string '$VERSION'" "$PLIST"
 
 echo "正在写入当前 commit 哈希到 Info.plist..."
 COMMIT_HASH=$(git rev-parse --short HEAD)
