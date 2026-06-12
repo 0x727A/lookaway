@@ -31,6 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var isSleepInactive = false     // 系统睡眠
     var isScreenInactive = false    // 屏幕睡眠/黑屏
     var isSessionInactive = false   // 锁屏/会话非活跃
+    var suspendDate: Date?
 
     var currentDisplayMode: DisplayMode {
         DisplayMode(rawValue: displayMode) ?? .iconAndTime
