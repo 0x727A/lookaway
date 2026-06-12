@@ -52,7 +52,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // 进程名兜底：防止旧包 bundle id 不同也能同时运行
         let runningLookAwayApps = NSWorkspace.shared.runningApplications.filter {
             $0.processIdentifier != currentPID &&
-            ($0.localizedName == "LookAway" || $0.bundleURL?.lastPathComponent == "LookAway.app")
+            ($0.executableURL?.lastPathComponent == "LookAway" || $0.bundleURL?.lastPathComponent == "LookAway.app")
         }
         if !runningLookAwayApps.isEmpty {
             runningLookAwayApps.first?.activate(options: [])
