@@ -95,10 +95,7 @@ extension AppDelegate {
         updateMenuTitle()
 
         if isSystemSuspended || isSleepInactive || isScreenInactive || isSessionInactive {
-            isSystemSuspended = true
-            workTimer?.invalidate()
-            workTimer = nil
-            workEndDate = nil
+            suspendWorkCountdownForInactiveSystem()
             return
         }
 
