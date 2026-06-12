@@ -9,10 +9,10 @@ final class RestSession: ObservableObject {
     private let duration: Int
     private let startTime = Date()
     private var timer: Timer?
-    private let onComplete: () -> Void
+    private let onComplete: @MainActor @Sendable () -> Void
     private var isCompleted = false
 
-    init(duration: Int, onComplete: @escaping () -> Void) {
+    init(duration: Int, onComplete: @escaping @MainActor @Sendable () -> Void) {
         let safeDuration = max(1, duration)
         self.duration = safeDuration
         self.remainingSeconds = safeDuration
