@@ -14,3 +14,8 @@ xcuserdata/
 
 # macOS noise
 .DS_Store
+
+# Local task and release artifacts
+改进任务.md
+*.zip
+
