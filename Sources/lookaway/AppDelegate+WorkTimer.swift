@@ -2,6 +2,7 @@ import Foundation
 
 extension AppDelegate {
     func startWorkTimer() {
+        guard !isSystemSuspended else { return }
         workTimer?.invalidate()
         workEndDate = Date().addingTimeInterval(TimeInterval(countdownSeconds))
 
