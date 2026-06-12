@@ -25,7 +25,7 @@ struct RestView: View {
                     .stroke(Color.green, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .frame(width: 120, height: 120)
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.1), value: session.progress)
+                    .animation(.linear(duration: 0.25), value: session.progress)
 
                 Text("\(session.remainingSeconds)")
                     .font(.system(size: 36, weight: .bold))

@@ -74,6 +74,14 @@ extension AppDelegate {
         let w: CGFloat = 28
         let h: CGFloat = 22
 
+        // 在 drawing handler 之外，先查出并上色好 SF Symbol，防止闭包内每帧/每次绘制时重复创建和染色
+        var tintedIcon: NSImage? = nil
+        if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 12.5, weight: iconWeight)
+                .applying(.init(hierarchicalColor: iconColor))
+            tintedIcon = symbol.withSymbolConfiguration(config)
+        }
+
         // 所有依赖 self 的数据先算成局部常量，避免 drawing handler 捕获 self
         let isResting = !restWindows.isEmpty
         let workTotalSeconds = workDurationMinutes * 60
@@ -101,10 +109,7 @@ extension AppDelegate {
 
         return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
             // 画图标（上方居中）
-            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                let config = NSImage.SymbolConfiguration(pointSize: 12.5, weight: iconWeight)
-                    .applying(.init(hierarchicalColor: iconColor))
-                let tinted = symbol.withSymbolConfiguration(config)
+            if let tintedIcon = tintedIcon {
                 let iconSize: CGFloat = 14
                 let iconRect = NSRect(
                     x: (w - iconSize) / 2,
@@ -112,7 +117,7 @@ extension AppDelegate {
                     width: iconSize,
                     height: iconSize
                 )
-                tinted?.draw(in: iconRect)
+                tintedIcon.draw(in: iconRect)
             }
 
             // 底部 5 个进度点

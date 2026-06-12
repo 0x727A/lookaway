@@ -21,7 +21,7 @@ final class RestSession: ObservableObject {
 
     func start() {
         timer?.invalidate()
-        timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+        timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.tick()
             }
