@@ -70,8 +70,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         playSoundOnRestEnd = defaults.object(forKey: DefaultsKey.playSoundOnRestEnd) as? Bool ?? true
         playSoundOnRestStart = defaults.object(forKey: DefaultsKey.playSoundOnRestStart) as? Bool ?? true
         let oldSound = defaults.string(forKey: DefaultsKey.alertSoundName)
-        restStartSoundName = safeSound(defaults.string(forKey: DefaultsKey.restStartSoundName) ?? oldSound, fallback: "Ping")
-        restEndSoundName = safeSound(defaults.string(forKey: DefaultsKey.restEndSoundName) ?? oldSound, fallback: "Glass")
+        restStartSoundName = SoundUtils.safeSound(defaults.string(forKey: DefaultsKey.restStartSoundName) ?? oldSound, fallback: "Ping")
+        restEndSoundName = SoundUtils.safeSound(defaults.string(forKey: DefaultsKey.restEndSoundName) ?? oldSound, fallback: "Glass")
         pauseVideoOnRestStart = defaults.object(forKey: DefaultsKey.pauseVideoOnRestStart) as? Bool ?? false
         let savedMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
         displayMode = DisplayMode(rawValue: savedMode) ?? .iconAndTime

@@ -99,7 +99,7 @@ struct SettingsView: View {
                 Toggle("休息开始播放提示音", isOn: $playSoundOnRestStart)
                     .font(.system(size: 13))
                 Picker("", selection: $restStartSoundName) {
-                    ForEach(systemAlertSounds, id: \.self) { sound in
+                    ForEach(SoundUtils.systemAlertSounds, id: \.self) { sound in
                         Text(sound).tag(sound)
                     }
                 }
@@ -113,7 +113,7 @@ struct SettingsView: View {
                 Toggle("休息结束播放提示音", isOn: $playSoundOnRestEnd)
                     .font(.system(size: 13))
                 Picker("", selection: $restEndSoundName) {
-                    ForEach(systemAlertSounds, id: \.self) { sound in
+                    ForEach(SoundUtils.systemAlertSounds, id: \.self) { sound in
                         Text(sound).tag(sound)
                     }
                 }
@@ -162,8 +162,8 @@ struct SettingsView: View {
                     let clampedRest = min(max(restSeconds, 5), 120)
                     workMinutes = clampedWork
                     restSeconds = clampedRest
-                    let safeStartSound = safeSound(restStartSoundName, fallback: "Ping")
-                    let safeEndSound = safeSound(restEndSoundName, fallback: "Glass")
+                    let safeStartSound = SoundUtils.safeSound(restStartSoundName, fallback: "Ping")
+                    let safeEndSound = SoundUtils.safeSound(restEndSoundName, fallback: "Glass")
                     onSave(SettingsValues(
                         workMinutes: clampedWork,
                         restSeconds: clampedRest,

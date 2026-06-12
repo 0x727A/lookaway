@@ -13,13 +13,15 @@ enum DefaultsKey {
     static let restEndSoundName = "LookAway.restEndSoundName"
 }
 
-let systemAlertSounds = [
-    "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass",
-    "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi",
-    "Submarine", "Tink"
-]
+enum SoundUtils {
+    static let systemAlertSounds = [
+        "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass",
+        "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi",
+        "Submarine", "Tink"
+    ]
 
-func safeSound(_ name: String?, fallback: String = "Glass") -> String {
-    guard let name = name, systemAlertSounds.contains(name) else { return fallback }
-    return name
+    static func safeSound(_ name: String?, fallback: String = "Glass") -> String {
+        guard let name = name, systemAlertSounds.contains(name) else { return fallback }
+        return name
+    }
 }
