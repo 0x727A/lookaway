@@ -15,5 +15,5 @@ struct SettingsValues {
     let restStartSoundName: String
     let restEndSoundName: String
     let pauseVideo: Bool
-    let displayMode: Int
+    let displayMode: DisplayMode
 }

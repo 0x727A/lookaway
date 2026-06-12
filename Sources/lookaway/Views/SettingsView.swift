@@ -28,7 +28,7 @@ struct SettingsView: View {
     @State var restEndSoundName: String
     @State var pauseVideo: Bool
     @State var launchAtLogin: Bool
-    @State var displayMode: Int
+    @State var displayMode: DisplayMode
     let onSave: (SettingsValues) -> Void
     let onCancel: () -> Void
     let onLaunchAtLoginChange: (Bool) -> Bool
@@ -143,9 +143,9 @@ struct SettingsView: View {
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                 Picker("", selection: $displayMode) {
-                    Text("图标+时间").tag(0)
-                    Text("仅时间").tag(1)
-                    Text("极简图标").tag(2)
+                    Text("图标+时间").tag(DisplayMode.iconAndTime)
+                    Text("仅时间").tag(DisplayMode.timeOnly)
+                    Text("极简图标").tag(DisplayMode.minimalIcon)
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 260)

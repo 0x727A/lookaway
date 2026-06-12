@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var restEndSoundName = "Glass"
     var pauseVideoOnRestStart = false
     var launchAtLogin = false
-    var displayMode = DisplayMode.iconAndTime.rawValue // persisted raw value
+    var displayMode: DisplayMode = .iconAndTime
     var dotPulseOn = false
     var singleClickWorkItem: DispatchWorkItem?
     var pendingShowSettings = false
@@ -34,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var suspendDate: Date?
 
     var currentDisplayMode: DisplayMode {
-        DisplayMode(rawValue: displayMode) ?? .iconAndTime
+        displayMode
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -73,7 +73,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         restStartSoundName = safeSound(defaults.string(forKey: DefaultsKey.restStartSoundName) ?? oldSound, fallback: "Ping")
         restEndSoundName = safeSound(defaults.string(forKey: DefaultsKey.restEndSoundName) ?? oldSound, fallback: "Glass")
         pauseVideoOnRestStart = defaults.object(forKey: DefaultsKey.pauseVideoOnRestStart) as? Bool ?? false
-        displayMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
+        let savedMode = defaults.object(forKey: DefaultsKey.displayMode) as? Int ?? 0
+        displayMode = DisplayMode(rawValue: savedMode) ?? .iconAndTime
         countdownSeconds = workDurationMinutes * 60
 
         statusItem = NSStatusBar.system.statusItem(withLength: 58)

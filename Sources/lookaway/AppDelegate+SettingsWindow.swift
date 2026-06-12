@@ -75,7 +75,7 @@ extension AppDelegate {
                 defaults.set(settings.restStartSoundName, forKey: DefaultsKey.restStartSoundName)
                 defaults.set(settings.restEndSoundName, forKey: DefaultsKey.restEndSoundName)
                 defaults.set(settings.pauseVideo, forKey: DefaultsKey.pauseVideoOnRestStart)
-                defaults.set(settings.displayMode, forKey: DefaultsKey.displayMode)
+                defaults.set(settings.displayMode.rawValue, forKey: DefaultsKey.displayMode)
 
                 let oldWorkDuration = self?.workDurationMinutes
                 let workDurationChanged = oldWorkDuration != settings.workMinutes
@@ -91,7 +91,7 @@ extension AppDelegate {
                 self?.displayMode = settings.displayMode
                 self?.updateMenuState()
 
-                if DisplayMode(rawValue: settings.displayMode) == .minimalIcon {
+                if settings.displayMode == .minimalIcon {
                     self?.dotPulseOn = true
                 }
 
