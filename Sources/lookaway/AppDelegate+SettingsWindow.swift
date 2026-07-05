@@ -77,8 +77,21 @@ extension AppDelegate {
                 defaults.set(settings.pauseVideo, forKey: DefaultsKey.pauseVideoOnRestStart)
                 defaults.set(settings.displayMode.rawValue, forKey: DefaultsKey.displayMode)
 
-                let oldWorkDuration = self?.workDurationMinutes
-                let workDurationChanged = oldWorkDuration != settings.workMinutes
+                let currentWorkMinutes = self?.workDurationMinutes ?? settings.workMinutes
+                let oldTotalSeconds = currentWorkMinutes * 60
+                let oldRemainingSeconds: Int
+
+                if let endDate = self?.workEndDate {
+                    oldRemainingSeconds = max(0, Int(ceil(endDate.timeIntervalSinceNow)))
+                } else {
+                    oldRemainingSeconds = self?.countdownSeconds ?? oldTotalSeconds
+                }
+
+                let elapsedSeconds = max(0, oldTotalSeconds - oldRemainingSeconds)
+                let newTotalSeconds = settings.workMinutes * 60
+                let newRemainingSeconds = max(0, newTotalSeconds - elapsedSeconds)
+                let workDurationChanged = currentWorkMinutes != settings.workMinutes
+                let shouldRecalculateCurrentCycle = workDurationChanged && self?.restWindows.isEmpty == true
 
                 self?.workDurationMinutes = settings.workMinutes
                 self?.restDurationSeconds = settings.restSeconds
@@ -95,18 +108,35 @@ extension AppDelegate {
                     self?.dotPulseOn = true
                 }
 
-                if workDurationChanged {
-                    self?.countdownSeconds = settings.workMinutes * 60
-                    if self?.isPaused == false && self?.restWindows.isEmpty == true {
-                        self?.workEndDate = Date().addingTimeInterval(TimeInterval(settings.workMinutes * 60))
+                if shouldRecalculateCurrentCycle {
+                    self?.countdownSeconds = newRemainingSeconds
+
+                    if self?.isPaused == false && self?.isSystemSuspended == false {
+                        if newRemainingSeconds <= 0 {
+                            self?.workEndDate = nil
+                        } else {
+                            self?.workEndDate = Date().addingTimeInterval(TimeInterval(newRemainingSeconds))
+                        }
                     } else {
                         self?.workEndDate = nil
                     }
                 }
 
+                let shouldEnterRestImmediately = shouldRecalculateCurrentCycle &&
+                    newRemainingSeconds <= 0 &&
+                    self?.isPaused == false &&
+                    self?.isSystemSuspended == false
+
                 self?.applyStatusItemLength()
                 self?.updateMenuTitle()
                 self?.settingsWindow?.close()
+
+                if shouldEnterRestImmediately {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.showRestWindow()
+                        self?.updateMenuTitle()
+                    }
+                }
             },
             onCancel: { [weak self] in
                 self?.settingsWindow?.close()
