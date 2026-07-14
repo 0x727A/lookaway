@@ -34,15 +34,18 @@ struct RestView: View {
 
             // 强制模式下不显示跳过按钮
             if !isForceMode {
-                Button("跳过休息") {
+                Button(action: {
                     onSkip()
+                }) {
+                    Text("跳过休息")
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(8)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(Color.white.opacity(0.15))
-                .cornerRadius(8)
-                .foregroundColor(.white)
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
             } else {
                 Text("强制休息中，无法跳过")
                     .font(.system(size: 14))
