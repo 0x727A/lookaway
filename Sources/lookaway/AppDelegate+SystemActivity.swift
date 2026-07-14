@@ -89,15 +89,15 @@ extension AppDelegate {
     @objc func screenParametersChanged() {
         guard !restWindows.isEmpty, let session = restSession else { return }
 
-        // 关闭并释放原先的所有窗口
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+
+        // 确认新屏幕可用后，再关闭并释放旧窗口
         for window in restWindows {
             window.orderOut(nil)
             window.contentView = nil
         }
         restWindows.removeAll()
-
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else { return }
 
         for screen in screens {
             let frame = screen.frame
