@@ -143,5 +143,7 @@ try:
         print("🚀 Release 发布及附件覆盖全部顺利完成!")
 except urllib.error.HTTPError as e:
     print(f"上传附件失败，HTTP 错误 {e.code}: {e.read().decode('utf-8')}")
+    sys.exit(1)
 except Exception as e:
     print(f"上传过程中发生未知错误: {e}")
+    sys.exit(1)
