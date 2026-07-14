@@ -2,8 +2,42 @@
 import os
 import sys
 import json
+import re
+import subprocess
 import urllib.request
 import urllib.error
+
+status_result = subprocess.run(
+    ["git", "status", "--porcelain", "--untracked-files=all"],
+    capture_output=True,
+    text=True,
+)
+if status_result.returncode != 0:
+    print(f"错误: 无法检查工作区状态: {status_result.stderr.strip()}")
+    sys.exit(1)
+
+if status_result.stdout:
+    print("错误: 工作区存在未提交修改，拒绝发布。")
+    print(status_result.stdout, end="")
+    sys.exit(1)
+
+tag_result = subprocess.run(
+    ["git", "describe", "--tags", "--exact-match", "HEAD"],
+    capture_output=True,
+    text=True,
+)
+if tag_result.returncode != 0:
+    print("错误: HEAD 没有精确对应版本 tag，拒绝发布。")
+    sys.exit(1)
+
+tag = tag_result.stdout.strip()
+if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+    print(f"错误: tag '{tag}' 不符合 vX.Y.Z 格式。")
+    sys.exit(1)
+
+version = tag.removeprefix("v")
+title = f"LookAway {tag}"
+zip_path = f"LookAway-{version}.zip"
 
 # 检查 GITHUB_TOKEN
 token = os.environ.get("GITHUB_TOKEN")
@@ -14,11 +48,8 @@ if not token:
 
 owner = "0x727A"
 repo = "lookaway"
-tag = "v1.2.0"
-title = "LookAway v1.2.0"
-zip_path = "LookAway-1.2.0.zip"
 
-body = """LookAway v1.2.0 是一次里程碑式的稳定性与体验更新，带来了多显示器插拔自适应、更多浏览器的进程隔离视频暂停、计时防误触作弊校验以及设置页交互优化。
+body = f"""LookAway {tag} 是一次里程碑式的稳定性与体验更新，带来了多显示器插拔自适应、更多浏览器的进程隔离视频暂停、计时防误触作弊校验以及设置页交互优化。
 
 ## 🚀 新增与改进
 - **多浏览器支持 (Edge/Arc/Brave)**：视频暂停组件新增了对 Microsoft Edge、Arc 和 Brave 浏览器的完美适配。
@@ -34,7 +65,7 @@ body = """LookAway v1.2.0 是一次里程碑式的稳定性与体验更新，带
 - **提交记录规范化**：重写了整个 Git 本地与远程提交历史，将全仓库提交日志规范化为中文。
 
 ## 📦 使用说明
-解压附件中的 `LookAway-1.2.0.zip`，将其中的 `LookAway.app` 直接拖入 macOS 的「应用程序 (Applications)」文件夹即可运行。"""
+解压附件中的 `{zip_path}`，将其中的 `LookAway.app` 直接拖入 macOS 的「应用程序 (Applications)」文件夹即可运行。"""
 
 headers = {
     "Authorization": f"Bearer {token}",
@@ -93,7 +124,7 @@ try:
 except urllib.error.HTTPError as e:
     err_body = e.read().decode("utf-8")
     if e.code == 422 and "already_exists" in err_body:
-        print("-> 检测到该 v1.2.0 Release 已经在 GitHub 上存在。正在尝试获取其 ID 以进行覆盖更新...")
+        print(f"-> 检测到该 {tag} Release 已经在 GitHub 上存在。正在尝试获取其 ID 以进行覆盖更新...")
         existing = get_existing_release()
         if existing:
             release_id = existing["id"]
