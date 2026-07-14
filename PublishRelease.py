@@ -4,6 +4,7 @@ import sys
 import json
 import re
 import subprocess
+import uuid
 import urllib.request
 import urllib.error
 
@@ -95,6 +96,65 @@ def delete_asset(asset_id):
         print(f"-> 清理旧分发附件失败: {e}")
         return False
 
+def upload_asset(release_id, name, file_data):
+    url = f"https://uploads.github.com/repos/{owner}/{repo}/releases/{release_id}/assets?name={name}"
+    headers_upload = headers.copy()
+    headers_upload["Content-Type"] = "application/zip"
+    req_upload = urllib.request.Request(
+        url,
+        data=file_data,
+        headers=headers_upload,
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req_upload) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"上传附件失败，HTTP 错误 {e.code}: {e.read().decode('utf-8')}")
+        return None
+    except Exception as e:
+        print(f"上传过程中发生未知错误: {e}")
+        return None
+
+def rename_asset(asset_id, new_name):
+    url = f"https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset_id}"
+    headers_update = headers.copy()
+    headers_update["Content-Type"] = "application/json"
+    req_rename = urllib.request.Request(
+        url,
+        data=json.dumps({"name": new_name}).encode("utf-8"),
+        headers=headers_update,
+        method="PATCH"
+    )
+
+    try:
+        with urllib.request.urlopen(req_rename) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"重命名附件失败，HTTP 错误 {e.code}: {e.read().decode('utf-8')}")
+        return None
+    except Exception as e:
+        print(f"重命名附件时发生未知错误: {e}")
+        return None
+
+def is_valid_asset(asset, expected_name, expected_size):
+    return (
+        isinstance(asset, dict)
+        and isinstance(asset.get("id"), int)
+        and asset["id"] > 0
+        and asset.get("name") == expected_name
+        and asset.get("state") == "uploaded"
+        and asset.get("size") == expected_size
+    )
+
+if not os.path.exists(zip_path):
+    print(f"错误: 找不到要上传的发行文件 '{zip_path}'，请先确认文件存在。")
+    sys.exit(1)
+
+with open(zip_path, "rb") as f:
+    file_data = f.read()
+
 # 1. 创建 Release
 create_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
 data = {
@@ -114,6 +174,7 @@ req = urllib.request.Request(
 )
 
 release_id = None
+old_asset = None
 
 print(f"正在创建 GitHub Release '{title}'...")
 try:
@@ -130,12 +191,14 @@ except urllib.error.HTTPError as e:
             release_id = existing["id"]
             print(f"-> 成功绑定到已有 Release! ID: {release_id}")
             
-            # 检查是否有重名的老附件并清理
+            # 记录同名旧附件，待临时附件验证成功后再删除。
             assets = existing.get("assets", [])
-            for asset in assets:
-                if asset["name"] == zip_path:
-                    print(f"-> 发现旧的同名附件 '{zip_path}'，正在进行删除释放...")
-                    delete_asset(asset["id"])
+            old_asset = next(
+                (asset for asset in assets if asset["name"] == zip_path),
+                None,
+            )
+            if old_asset:
+                print(f"-> 发现旧的同名附件 '{zip_path}'，将在新附件验证后替换。")
         else:
             print("错误: 无法获取已存在的 Release 详情，终止流程。")
             sys.exit(1)
@@ -146,35 +209,45 @@ except Exception as e:
     print(f"发生未知错误: {e}")
     sys.exit(1)
 
-# 2. 上传最新的二进制文件
-if not os.path.exists(zip_path):
-    print(f"错误: 找不到要上传的发行文件 '{zip_path}'，请先确认文件存在。")
+# 2. 临时上传、验证并替换附件
+temp_name = f"LookAway-{version}-upload-{uuid.uuid4().hex}.zip"
+print(f"正在上传临时附件 {temp_name} 到 GitHub (可能需要一些网络时间)...")
+temp_asset = upload_asset(release_id, temp_name, file_data)
+
+if not is_valid_asset(temp_asset, temp_name, len(file_data)):
+    print("错误: 临时附件上传响应未通过验证，旧附件保持不动。")
+    temp_asset_id = temp_asset.get("id") if isinstance(temp_asset, dict) else None
+    if isinstance(temp_asset_id, int) and temp_asset_id > 0:
+        cleanup_succeeded = delete_asset(temp_asset_id)
+        if not cleanup_succeeded:
+            print(f"警告: 无法清理临时附件 (Asset ID: {temp_asset_id})。")
     sys.exit(1)
 
-upload_url = f"https://uploads.github.com/repos/{owner}/{repo}/releases/{release_id}/assets?name={zip_path}"
-headers_upload = headers.copy()
-headers_upload["Content-Type"] = "application/zip"
+temp_asset_id = temp_asset["id"]
+if old_asset:
+    old_asset_id = old_asset.get("id")
+    if not isinstance(old_asset_id, int) or old_asset_id <= 0:
+        print("错误: 旧附件缺少有效 ID，停止重命名临时附件。")
+        cleanup_succeeded = delete_asset(temp_asset_id)
+        if not cleanup_succeeded:
+            print(f"警告: 无法清理临时附件 (Asset ID: {temp_asset_id})。")
+        sys.exit(1)
 
-print(f"正在上传最新构建的 {zip_path} 到 GitHub (可能需要一些网络时间)...")
-try:
-    with open(zip_path, "rb") as f:
-        file_data = f.read()
-    
-    req_upload = urllib.request.Request(
-        upload_url,
-        data=file_data,
-        headers=headers_upload,
-        method="POST"
-    )
-    
-    with urllib.request.urlopen(req_upload) as response:
-        print("🎉 上传成功!")
-        res_upload = json.loads(response.read().decode("utf-8"))
-        print(f"⏬ 最终下载地址: {res_upload.get('browser_download_url')}")
-        print("🚀 Release 发布及附件覆盖全部顺利完成!")
-except urllib.error.HTTPError as e:
-    print(f"上传附件失败，HTTP 错误 {e.code}: {e.read().decode('utf-8')}")
+    if not delete_asset(old_asset_id):
+        print("错误: 删除旧附件失败，停止重命名临时附件。")
+        cleanup_succeeded = delete_asset(temp_asset_id)
+        if not cleanup_succeeded:
+            print(f"警告: 无法清理临时附件 (Asset ID: {temp_asset_id})。")
+        sys.exit(1)
+
+renamed_asset = rename_asset(temp_asset_id, zip_path)
+if not is_valid_asset(renamed_asset, zip_path, len(file_data)):
+    print("错误: 临时附件重命名或验证失败，临时附件未被删除。")
+    print(f"临时附件 ID: {temp_asset_id}")
+    print(f"临时附件名称: {temp_name}")
+    print(f"临时附件下载地址: {temp_asset.get('browser_download_url')}")
     sys.exit(1)
-except Exception as e:
-    print(f"上传过程中发生未知错误: {e}")
-    sys.exit(1)
+
+print("🎉 上传成功!")
+print(f"⏬ 最终下载地址: {renamed_asset.get('browser_download_url')}")
+print("🚀 Release 发布及附件覆盖全部顺利完成!")
